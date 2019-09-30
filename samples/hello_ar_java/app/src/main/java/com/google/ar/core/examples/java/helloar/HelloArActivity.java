@@ -26,6 +26,8 @@ import android.widget.Toast;
 import com.google.ar.core.Anchor;
 import com.google.ar.core.ArCoreApk;
 import com.google.ar.core.Camera;
+import com.google.ar.core.CameraConfig;
+import com.google.ar.core.Config;
 import com.google.ar.core.Frame;
 import com.google.ar.core.HitResult;
 import com.google.ar.core.Plane;
@@ -54,8 +56,19 @@ import com.google.ar.core.exceptions.UnavailableSdkTooOldException;
 import com.google.ar.core.exceptions.UnavailableUserDeclinedInstallationException;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.List;
+
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
+
+import okhttp3.Call;
+import okhttp3.Callback;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
 
 /**
  * This is a simple example that shows how to create an augmented reality (AR) application using the
@@ -148,6 +161,11 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
         // Create the session.
         session = new Session(/* context= */ this);
+
+        List<CameraConfig> cameraConfigs = session.getSupportedCameraConfigs();
+        Config config = new Config(session);
+        config.setFocusMode(Config.FocusMode.AUTO);
+        session.configure(config);
 
       } catch (UnavailableArcoreNotInstalledException
           | UnavailableUserDeclinedInstallationException e) {
@@ -319,25 +337,25 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       }
 
       // Visualize planes.
-      planeRenderer.drawPlanes(
-          session.getAllTrackables(Plane.class), camera.getDisplayOrientedPose(), projmtx);
+//      planeRenderer.drawPlanes(
+//          session.getAllTrackables(Plane.class), camera.getDisplayOrientedPose(), projmtx);
 
       // Visualize anchors created by touch.
-      float scaleFactor = 1.0f;
-      for (ColoredAnchor coloredAnchor : anchors) {
-        if (coloredAnchor.anchor.getTrackingState() != TrackingState.TRACKING) {
-          continue;
-        }
-        // Get the current pose of an Anchor in world space. The Anchor pose is updated
-        // during calls to session.update() as ARCore refines its estimate of the world.
-        coloredAnchor.anchor.getPose().toMatrix(anchorMatrix, 0);
-
-        // Update and draw the model and its shadow.
-        virtualObject.updateModelMatrix(anchorMatrix, scaleFactor);
-        virtualObjectShadow.updateModelMatrix(anchorMatrix, scaleFactor);
-        virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, coloredAnchor.color);
-        virtualObjectShadow.draw(viewmtx, projmtx, colorCorrectionRgba, coloredAnchor.color);
-      }
+//      float scaleFactor = 1.0f;
+//      for (ColoredAnchor coloredAnchor : anchors) {
+//        if (coloredAnchor.anchor.getTrackingState() != TrackingState.TRACKING) {
+//          continue;
+//        }
+//        // Get the current pose of an Anchor in world space. The Anchor pose is updated
+//        // during calls to session.update() as ARCore refines its estimate of the world.
+//        coloredAnchor.anchor.getPose().toMatrix(anchorMatrix, 0);
+//
+//        // Update and draw the model and its shadow.
+//        virtualObject.updateModelMatrix(anchorMatrix, scaleFactor);
+//        virtualObjectShadow.updateModelMatrix(anchorMatrix, scaleFactor);
+//        virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, coloredAnchor.color);
+//        virtualObjectShadow.draw(viewmtx, projmtx, colorCorrectionRgba, coloredAnchor.color);
+//      }
 
     } catch (Throwable t) {
       // Avoid crashing the application due to unhandled exceptions.
@@ -349,43 +367,43 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   private void handleTap(Frame frame, Camera camera) {
     MotionEvent tap = tapHelper.poll();
     if (tap != null && camera.getTrackingState() == TrackingState.TRACKING) {
-      for (HitResult hit : frame.hitTest(tap)) {
-        // Check if any plane was hit, and if it was hit inside the plane polygon
-        Trackable trackable = hit.getTrackable();
-        // Creates an anchor if a plane or an oriented point was hit.
-        if ((trackable instanceof Plane
-                && ((Plane) trackable).isPoseInPolygon(hit.getHitPose())
-                && (PlaneRenderer.calculateDistanceToPlane(hit.getHitPose(), camera.getPose()) > 0))
-            || (trackable instanceof Point
-                && ((Point) trackable).getOrientationMode()
-                    == OrientationMode.ESTIMATED_SURFACE_NORMAL)) {
-          // Hits are sorted by depth. Consider only closest hit on a plane or oriented point.
-          // Cap the number of objects created. This avoids overloading both the
-          // rendering system and ARCore.
-          if (anchors.size() >= 20) {
-            anchors.get(0).anchor.detach();
-            anchors.remove(0);
-          }
-
-          // Assign a color to the object for rendering based on the trackable type
-          // this anchor attached to. For AR_TRACKABLE_POINT, it's blue color, and
-          // for AR_TRACKABLE_PLANE, it's green color.
-          float[] objColor;
-          if (trackable instanceof Point) {
-            objColor = new float[] {66.0f, 133.0f, 244.0f, 255.0f};
-          } else if (trackable instanceof Plane) {
-            objColor = new float[] {139.0f, 195.0f, 74.0f, 255.0f};
-          } else {
-            objColor = DEFAULT_COLOR;
-          }
-
-          // Adding an Anchor tells ARCore that it should track this position in
-          // space. This anchor is created on the Plane to place the 3D model
-          // in the correct position relative both to the world and to the plane.
-          anchors.add(new ColoredAnchor(hit.createAnchor(), objColor));
-          break;
-        }
-      }
+//      for (HitResult hit : frame.hitTest(tap)) {
+//        // Check if any plane was hit, and if it was hit inside the plane polygon
+//        Trackable trackable = hit.getTrackable();
+//        // Creates an anchor if a plane or an oriented point was hit.
+//        if ((trackable instanceof Plane
+//                && ((Plane) trackable).isPoseInPolygon(hit.getHitPose())
+//                && (PlaneRenderer.calculateDistanceToPlane(hit.getHitPose(), camera.getPose()) > 0))
+//            || (trackable instanceof Point
+//                && ((Point) trackable).getOrientationMode()
+//                    == OrientationMode.ESTIMATED_SURFACE_NORMAL)) {
+//          // Hits are sorted by depth. Consider only closest hit on a plane or oriented point.
+//          // Cap the number of objects created. This avoids overloading both the
+//          // rendering system and ARCore.
+//          if (anchors.size() >= 20) {
+//            anchors.get(0).anchor.detach();
+//            anchors.remove(0);
+//          }
+//
+//          // Assign a color to the object for rendering based on the trackable type
+//          // this anchor attached to. For AR_TRACKABLE_POINT, it's blue color, and
+//          // for AR_TRACKABLE_PLANE, it's green color.
+//          float[] objColor;
+//          if (trackable instanceof Point) {
+//            objColor = new float[] {66.0f, 133.0f, 244.0f, 255.0f};
+//          } else if (trackable instanceof Plane) {
+//            objColor = new float[] {139.0f, 195.0f, 74.0f, 255.0f};
+//          } else {
+//            objColor = DEFAULT_COLOR;
+//          }
+//
+//          // Adding an Anchor tells ARCore that it should track this position in
+//          // space. This anchor is created on the Plane to place the 3D model
+//          // in the correct position relative both to the world and to the plane.
+//          anchors.add(new ColoredAnchor(hit.createAnchor(), objColor));
+//          break;
+//        }
+//      }
     }
   }
 

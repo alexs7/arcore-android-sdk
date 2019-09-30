@@ -16,9 +16,12 @@
 
 package com.google.ar.core.examples.java.helloar;
 
+import android.graphics.Bitmap;
 import android.opengl.GLES20;
+import android.opengl.GLException;
 import android.opengl.GLSurfaceView;
 import android.os.Bundle;
+import android.os.Environment;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.MotionEvent;
@@ -54,8 +57,16 @@ import com.google.ar.core.exceptions.UnavailableArcoreNotInstalledException;
 import com.google.ar.core.exceptions.UnavailableDeviceNotCompatibleException;
 import com.google.ar.core.exceptions.UnavailableSdkTooOldException;
 import com.google.ar.core.exceptions.UnavailableUserDeclinedInstallationException;
+
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.FloatBuffer;
+import java.nio.IntBuffer;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import javax.microedition.khronos.egl.EGLConfig;
@@ -100,6 +111,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   private static final float[] DEFAULT_COLOR = new float[] {0f, 0f, 0f, 0f};
 
   private static final String SEARCHING_PLANE_MESSAGE = "Searching for surfaces...";
+  private FloatBuffer pointCloudCopy = null;
 
   // Anchors created from taps used for object placing with a given color.
   private static class ColoredAnchor {
@@ -292,7 +304,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       Camera camera = frame.getCamera();
 
       // Handle one tap per frame.
-      handleTap(frame, camera);
+      handleTap(frame, camera, gl);
 
       // If frame is ready, render camera preview image to the GL surface.
       backgroundRenderer.draw(frame);
@@ -324,6 +336,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       // Visualize tracked points.
       // Use try-with-resources to automatically release the point cloud.
       try (PointCloud pointCloud = frame.acquirePointCloud()) {
+        pointCloudCopy =  pointCloud.getPoints().duplicate();
         pointCloudRenderer.update(pointCloud);
         pointCloudRenderer.draw(viewmtx, projmtx);
       }
@@ -364,9 +377,32 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   }
 
   // Handle only one tap per frame, as taps are usually low frequency compared to frame rate.
-  private void handleTap(Frame frame, Camera camera) {
+  private void handleTap(Frame frame, Camera camera, GL10 gl) {
     MotionEvent tap = tapHelper.poll();
     if (tap != null && camera.getTrackingState() == TrackingState.TRACKING) {
+
+      // Get projection matrix.
+      float[] projmtx = new float[16];
+      camera.getProjectionMatrix(projmtx, 0, 0.1f, 100.0f);
+
+      // Get camera matrix.
+      float[] viewmtx = new float[16];
+      camera.getViewMatrix(viewmtx, 0);
+
+      // Get pose matrix.
+      float[] posemtx = new float[16];
+      frame.getAndroidSensorPose().toMatrix(posemtx,0);
+
+      try {
+        writeMatrixToFile(viewmtx, "viewmtx");
+        writeMatrixToFile(projmtx, "projmtx");
+        writeMatrixToFile(posemtx, "posemtx");
+        writeFrameToFile(gl);
+        write3DPoints(pointCloudCopy);
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
+
 //      for (HitResult hit : frame.hitTest(tap)) {
 //        // Check if any plane was hit, and if it was hit inside the plane polygon
 //        Trackable trackable = hit.getTrackable();
@@ -405,6 +441,74 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 //        }
 //      }
     }
+  }
+
+  private void writeFrameToFile(GL10 gl) throws IOException {
+    String mPath = Environment.getExternalStorageDirectory().toString() + "/data_ar/frame.jpg";
+    Bitmap bitmap = createBitmapFromGLSurface(0,0, 1440, 2880, gl);
+    File imageFile = new File(mPath);
+
+    FileOutputStream outputStream = new FileOutputStream(imageFile);
+    int quality = 100;
+    bitmap.compress(Bitmap.CompressFormat.JPEG, quality, outputStream);
+    outputStream.flush();
+    outputStream.close();
+  }
+
+  private Bitmap createBitmapFromGLSurface(int x, int y, int w, int h, GL10 gl) throws OutOfMemoryError {
+    int bitmapBuffer[] = new int[w * h];
+    int bitmapSource[] = new int[w * h];
+    IntBuffer intBuffer = IntBuffer.wrap(bitmapBuffer);
+    intBuffer.position(0);
+
+    try {
+      gl.glReadPixels(x, y, w, h, GL10.GL_RGBA, GL10.GL_UNSIGNED_BYTE, intBuffer);
+      int offset1, offset2;
+      for (int i = 0; i < h; i++) {
+        offset1 = i * w;
+        offset2 = (h - i - 1) * w;
+        for (int j = 0; j < w; j++) {
+          int texturePixel = bitmapBuffer[offset1 + j];
+          int blue = (texturePixel >> 16) & 0xff;
+          int red = (texturePixel << 16) & 0x00ff0000;
+          int pixel = (texturePixel & 0xff00ff00) | red | blue;
+          bitmapSource[offset2 + j] = pixel;
+        }
+      }
+    } catch (GLException e) {
+      return null;
+    }
+
+    return Bitmap.createBitmap(bitmapSource, w, h, Bitmap.Config.ARGB_8888);
+  }
+
+  private void write3DPoints(FloatBuffer points) throws IOException {
+    String txt = "";
+
+    while (points.hasRemaining()){
+      txt = txt.concat(Float.toString(points.get()) + " ");
+    }
+
+    File matrixFile = new File(Environment.getExternalStorageDirectory().toString() + "/data_ar/points.txt");
+    FileOutputStream outputStream = new FileOutputStream(matrixFile);
+
+    outputStream.write(txt.getBytes(Charset.forName("UTF-8")));
+    outputStream.flush();
+    outputStream.close();
+  }
+
+  private void writeMatrixToFile(float[] matrix, String filename) throws IOException {
+    String matrixString = matrix[0] + " " + matrix[4] + " " + matrix[8] + " " +  matrix[12] + "\n" +
+                          matrix[1] + " " + matrix[5] + " " + matrix[9] + " " +  matrix[13] + "\n" +
+                          matrix[2] + " " + matrix[6] + " " + matrix[10] + " " + matrix[14] + "\n" +
+                          matrix[3] + " " + matrix[7] + " " + matrix[11] + " " + matrix[15] + "\n";
+
+    File matrixFile = new File(Environment.getExternalStorageDirectory().toString() + "/data_ar/" + filename + ".txt");
+    FileOutputStream outputStream = new FileOutputStream(matrixFile);
+
+    outputStream.write(matrixString.getBytes(Charset.forName("UTF-8")));
+    outputStream.flush();
+    outputStream.close();
   }
 
   /** Checks if we detected at least one plane. */

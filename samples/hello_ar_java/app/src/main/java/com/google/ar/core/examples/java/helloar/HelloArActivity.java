@@ -16,8 +16,11 @@
 
 package com.google.ar.core.examples.java.helloar;
 
+import android.graphics.Bitmap;
 import android.opengl.GLES20;
+import android.opengl.GLException;
 import android.opengl.GLSurfaceView;
+import android.opengl.Matrix;
 import android.os.Bundle;
 import android.os.Environment;
 import android.support.v7.app.AppCompatActivity;
@@ -60,7 +63,9 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.ObjectOutputStream;
 import java.nio.FloatBuffer;
+import java.nio.IntBuffer;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -300,9 +305,6 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       Frame frame = session.update();
       Camera camera = frame.getCamera();
 
-      // Handle one tap per frame.
-      handleTap(frame, camera);
-
       // If frame is ready, render camera preview image to the GL surface.
       backgroundRenderer.draw(frame);
 
@@ -333,9 +335,15 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       // Visualize tracked points.
       // Use try-with-resources to automatically release the point cloud.
       try (PointCloud pointCloud = frame.acquirePointCloud()) {
-        pointCloudCopy =  pointCloud.getPoints().duplicate();
+
+        pointCloudCopy = pointCloud.getPoints().duplicate();
+
         pointCloudRenderer.update(pointCloud);
         pointCloudRenderer.draw(viewmtx, projmtx);
+
+        // Handle one tap per frame.
+        handleTap(frame, camera, gl, pointCloudCopy);
+
       }
 
       // No tracking error at this point. If we detected any plane, then hide the
@@ -374,8 +382,9 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   }
 
   // Handle only one tap per frame, as taps are usually low frequency compared to frame rate.
-  private void handleTap(Frame frame, Camera camera) {
+  private void handleTap(Frame frame, Camera camera, GL10 gl, FloatBuffer pointCloud) {
     MotionEvent tap = tapHelper.poll();
+
     if (tap != null && camera.getTrackingState() == TrackingState.TRACKING) {
 
       // Get projection matrix.
@@ -390,64 +399,138 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       float[] posemtx = new float[16];
       frame.getAndroidSensorPose().toMatrix(posemtx,0);
 
+      FloatBuffer pointCloudCopyCopy = pointCloud.duplicate();
+      ArrayList<double[]> correspondences = get2D3DCorrespondences(pointCloud, viewmtx, projmtx);
+
       try {
         writeMatrixToFile(viewmtx, "viewmtx");
         writeMatrixToFile(projmtx, "projmtx");
         writeMatrixToFile(posemtx, "posemtx");
-        write3DPoints(pointCloudCopy);
+        write3DPoints(pointCloudCopyCopy);
+        writeCorrespondences(correspondences);
+        takeScreenshot(gl);
       } catch (IOException e) {
         e.printStackTrace();
       }
 
-//      for (HitResult hit : frame.hitTest(tap)) {
-//        // Check if any plane was hit, and if it was hit inside the plane polygon
-//        Trackable trackable = hit.getTrackable();
-//        // Creates an anchor if a plane or an oriented point was hit.
-//        if ((trackable instanceof Plane
-//                && ((Plane) trackable).isPoseInPolygon(hit.getHitPose())
-//                && (PlaneRenderer.calculateDistanceToPlane(hit.getHitPose(), camera.getPose()) > 0))
-//            || (trackable instanceof Point
-//                && ((Point) trackable).getOrientationMode()
-//                    == OrientationMode.ESTIMATED_SURFACE_NORMAL)) {
-//          // Hits are sorted by depth. Consider only closest hit on a plane or oriented point.
-//          // Cap the number of objects created. This avoids overloading both the
-//          // rendering system and ARCore.
-//          if (anchors.size() >= 20) {
-//            anchors.get(0).anchor.detach();
-//            anchors.remove(0);
-//          }
-//
-//          // Assign a color to the object for rendering based on the trackable type
-//          // this anchor attached to. For AR_TRACKABLE_POINT, it's blue color, and
-//          // for AR_TRACKABLE_PLANE, it's green color.
-//          float[] objColor;
-//          if (trackable instanceof Point) {
-//            objColor = new float[] {66.0f, 133.0f, 244.0f, 255.0f};
-//          } else if (trackable instanceof Plane) {
-//            objColor = new float[] {139.0f, 195.0f, 74.0f, 255.0f};
-//          } else {
-//            objColor = DEFAULT_COLOR;
-//          }
-//
-//          // Adding an Anchor tells ARCore that it should track this position in
-//          // space. This anchor is created on the Plane to place the 3D model
-//          // in the correct position relative both to the world and to the plane.
-//          anchors.add(new ColoredAnchor(hit.createAnchor(), objColor));
-//          break;
-//        }
-//      }
     }
+  }
+
+  private ArrayList<double[]> get2D3DCorrespondences(FloatBuffer points3D, float[] viewmtx, float[] projmtx) {
+
+    float x = 0;
+    float y = 0;
+    float z = 0;
+    float w = 1;
+    float c = 0; // not used
+    float[] point3D = new float[4];
+    float[] world2screenMatrix = new float[16];
+    float[] ndcPoint = new float[4];
+
+    ArrayList<double[]> correspondences2D3D = new ArrayList<>();
+
+    Matrix.multiplyMM(world2screenMatrix, 0, projmtx, 0, viewmtx, 0);
+
+    while (points3D.hasRemaining()){
+
+      //these two need to be declared here!
+      double[] screenPoint = new double[]{0,0};
+      double[] correspondence2D3D = new double[]{0,0,0,0,0};
+
+      x = points3D.get();
+      y = points3D.get();
+      z = points3D.get();
+      c = points3D.get(); //just to get the position moving - not used
+
+      point3D[0] = x;
+      point3D[1] = y;
+      point3D[2] = z;
+      point3D[3] = w;
+
+      Matrix.multiplyMV(ndcPoint, 0,  world2screenMatrix, 0,  point3D, 0);
+
+      ndcPoint[0] = ndcPoint[0] / ndcPoint[3];
+      ndcPoint[1] = ndcPoint[1] / ndcPoint[3];
+
+      screenPoint[0] = 1440 * ((ndcPoint[0] + 1.0) / 2.0);
+      screenPoint[1] = 2880 * ((1.0 - ndcPoint[1]) / 2.0);
+
+      correspondence2D3D[0] = screenPoint[0];
+      correspondence2D3D[1] = screenPoint[1];
+      correspondence2D3D[2] = point3D[0];
+      correspondence2D3D[3] = point3D[1];
+      correspondence2D3D[4] = point3D[2];
+
+      correspondences2D3D.add(correspondence2D3D);
+    }
+
+    return correspondences2D3D;
+
+  }
+
+  private void writeCorrespondences(ArrayList<double[]> correspondences) throws IOException {
+    String txt = "";
+
+    for (double[] correspondence : correspondences){
+      txt = txt.concat(correspondence[0] + " " + correspondence[1] + " " + correspondence[2] + " " + correspondence[3] + " " + correspondence[4] + "\n");
+    }
+
+    File arrayFile = new File(Environment.getExternalStorageDirectory().toString() + "/data_ar/correspondences.txt");
+    FileOutputStream outputStream = new FileOutputStream(arrayFile);
+
+    outputStream.write(txt.getBytes(Charset.forName("UTF-8")));
+    outputStream.flush();
+    outputStream.close();
+  }
+
+  public void takeScreenshot(GL10 gl) throws IOException {
+    int w = 1440;
+    int h = 2880;
+    int bitmapBuffer[] = new int[w * h];
+    int bitmapSource[] = new int[w * h];
+
+    IntBuffer intBuffer = IntBuffer.wrap(bitmapBuffer);
+    intBuffer.position(0);
+
+    try {
+      gl.glReadPixels(0, 0, w, h, GL10.GL_RGBA, GL10.GL_UNSIGNED_BYTE, intBuffer);
+      int offset1, offset2;
+      for (int i = 0; i < h; i++) {
+        offset1 = i * w;
+        offset2 = (h - i - 1) * w;
+        for (int j = 0; j < w; j++) {
+          int texturePixel = bitmapBuffer[offset1 + j];
+          int blue = (texturePixel >> 16) & 0xff;
+          int red = (texturePixel << 16) & 0x00ff0000;
+          int pixel = (texturePixel & 0xff00ff00) | red | blue;
+          bitmapSource[offset2 + j] = pixel;
+        }
+      }
+    } catch (GLException e) {
+
+    }
+
+    String mPath = Environment.getExternalStorageDirectory().toString() + "/data_ar/frame.jpg";
+    File imageFile = new File(mPath);
+    FileOutputStream outputStream = new FileOutputStream(imageFile);
+    int quality = 100;
+
+    Bitmap bitmap = Bitmap.createBitmap(bitmapSource, w, h, Bitmap.Config.ARGB_8888);
+
+    bitmap.compress(Bitmap.CompressFormat.JPEG, quality, outputStream);
+
+    outputStream.flush();
+    outputStream.close();
   }
 
   private void write3DPoints(FloatBuffer points) throws IOException {
     String txt = "";
-//    float[] array = points.array();
 
     while (points.hasRemaining()){
       txt = txt.concat(Float.toString(points.get()) + " ");
     }
 
-    File matrixFile = new File(Environment.getExternalStorageDirectory().toString() + "/data_ar/points.txt");
+    File matrixFile = new File(Environment.getExternalStorageDirectory().toString() + "/data_ar/points3Dworld.txt");
     FileOutputStream outputStream = new FileOutputStream(matrixFile);
 
     outputStream.write(txt.getBytes(Charset.forName("UTF-8")));

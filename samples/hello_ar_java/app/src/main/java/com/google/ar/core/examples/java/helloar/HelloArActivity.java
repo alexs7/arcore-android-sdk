@@ -31,6 +31,7 @@ import com.google.ar.core.Anchor;
 import com.google.ar.core.ArCoreApk;
 import com.google.ar.core.Camera;
 import com.google.ar.core.CameraConfig;
+import com.google.ar.core.CameraIntrinsics;
 import com.google.ar.core.Config;
 import com.google.ar.core.Frame;
 import com.google.ar.core.HitResult;
@@ -395,20 +396,32 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       float[] viewmtx = new float[16];
       camera.getViewMatrix(viewmtx, 0);
 
-      // Get pose matrix.
-      float[] posemtx = new float[16];
-      frame.getAndroidSensorPose().toMatrix(posemtx,0);
+      // Get pose matrices.
+      float[] posemtx_android_sensor = new float[16];
+      frame.getAndroidSensorPose().toMatrix(posemtx_android_sensor,0);
+
+      float[] posemtx_oriented = new float[16];
+      frame.getCamera().getDisplayOrientedPose().toMatrix(posemtx_oriented,0);
+
+      float[] posemtx_plain = new float[16];
+      frame.getCamera().getPose().toMatrix(posemtx_plain,0);
 
       FloatBuffer pointCloudCopyCopy = pointCloud.duplicate();
       ArrayList<double[]> correspondences = get2D3DCorrespondences(pointCloud, viewmtx, projmtx);
 
       try {
+
         writeMatrixToFile(viewmtx, "viewmtx");
         writeMatrixToFile(projmtx, "projmtx");
-        writeMatrixToFile(posemtx, "posemtx");
+
+        writeMatrixToFile(posemtx_android_sensor, "posemtx_android_sensor");
+        writeMatrixToFile(posemtx_oriented, "posemtx_oriented");
+        writeMatrixToFile(posemtx_plain, "posemtx_plain");
+
         write3DPoints(pointCloudCopyCopy);
         writeCorrespondences(correspondences);
         takeScreenshot(gl);
+
       } catch (IOException e) {
         e.printStackTrace();
       }

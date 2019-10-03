@@ -17,6 +17,7 @@
 package com.google.ar.core.examples.java.helloar;
 
 import android.graphics.Bitmap;
+import android.media.Image;
 import android.opengl.GLES20;
 import android.opengl.GLException;
 import android.opengl.GLSurfaceView;
@@ -31,16 +32,12 @@ import com.google.ar.core.Anchor;
 import com.google.ar.core.ArCoreApk;
 import com.google.ar.core.Camera;
 import com.google.ar.core.CameraConfig;
-import com.google.ar.core.CameraIntrinsics;
 import com.google.ar.core.Config;
+import com.google.ar.core.Coordinates2d;
 import com.google.ar.core.Frame;
-import com.google.ar.core.HitResult;
 import com.google.ar.core.Plane;
-import com.google.ar.core.Point;
-import com.google.ar.core.Point.OrientationMode;
 import com.google.ar.core.PointCloud;
 import com.google.ar.core.Session;
-import com.google.ar.core.Trackable;
 import com.google.ar.core.TrackingState;
 import com.google.ar.core.examples.java.common.helpers.CameraPermissionHelper;
 import com.google.ar.core.examples.java.common.helpers.DisplayRotationHelper;
@@ -54,6 +51,7 @@ import com.google.ar.core.examples.java.common.rendering.ObjectRenderer.BlendMod
 import com.google.ar.core.examples.java.common.rendering.PlaneRenderer;
 import com.google.ar.core.examples.java.common.rendering.PointCloudRenderer;
 import com.google.ar.core.exceptions.CameraNotAvailableException;
+import com.google.ar.core.exceptions.NotYetAvailableException;
 import com.google.ar.core.exceptions.UnavailableApkTooOldException;
 import com.google.ar.core.exceptions.UnavailableArcoreNotInstalledException;
 import com.google.ar.core.exceptions.UnavailableDeviceNotCompatibleException;
@@ -61,28 +59,16 @@ import com.google.ar.core.exceptions.UnavailableSdkTooOldException;
 import com.google.ar.core.exceptions.UnavailableUserDeclinedInstallationException;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.ObjectOutputStream;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
-
-import okhttp3.Call;
-import okhttp3.Callback;
-import okhttp3.MediaType;
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.RequestBody;
-import okhttp3.Response;
-import okhttp3.ResponseBody;
 
 /**
  * This is a simple example that shows how to create an augmented reality (AR) application using the
@@ -409,6 +395,14 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       FloatBuffer pointCloudCopyCopy = pointCloud.duplicate();
       ArrayList<double[]> correspondences = get2D3DCorrespondences(pointCloud, viewmtx, projmtx);
 
+      ArrayList<double[]> cpuImageCorrespondences = getCPUImageCorrespondences(frame, correspondences);
+
+      try {
+        Image frameImage = frame.acquireCameraImage();
+      } catch (NotYetAvailableException e) {
+        e.printStackTrace();
+      }
+
       try {
 
         writeMatrixToFile(viewmtx, "viewmtx");
@@ -419,7 +413,10 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
         writeMatrixToFile(posemtx_plain, "posemtx_plain");
 
         write3DPoints(pointCloudCopyCopy);
-        writeCorrespondences(correspondences);
+
+        writeCorrespondences(correspondences, "correspondences" );
+        writeCorrespondences(cpuImageCorrespondences, "cpuImageCorrespondences");
+
         takeScreenshot(gl);
 
       } catch (IOException e) {
@@ -427,6 +424,50 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       }
 
     }
+  }
+
+  private ArrayList<double[]> getCPUImageCorrespondences(Frame frame, ArrayList<double[]> correspondences) {
+
+    ArrayList<double[]> cpuImageCorrespondences = new ArrayList<>();
+
+    float[] xyVIEW = new float[correspondences.size() * 2];
+    float[] xyCPU = new float[correspondences.size() * 2];
+
+    for (int i = 0; i < correspondences.size(); i++) {
+
+      xyVIEW[i] = (float) correspondences.get(i)[0];
+      xyVIEW[i+1] = (float) correspondences.get(i)[1];
+    }
+
+    frame.transformCoordinates2d(Coordinates2d.VIEW, xyVIEW, Coordinates2d.IMAGE_PIXELS, xyCPU);
+
+    ArrayList<double[]> tempCPUImageCorrespondenceXY = new ArrayList<>();
+
+    for (int i = 0; i < xyCPU.length; i++) {
+
+      double[] cpuImageCorrespondenceXY = new double[]{0,0};
+
+      cpuImageCorrespondenceXY[0] = xyCPU[i];
+      cpuImageCorrespondenceXY[1] = xyCPU[i+1];
+
+      tempCPUImageCorrespondenceXY.add(cpuImageCorrespondenceXY);
+    }
+
+    for (int i = 0; i < correspondences.size(); i++) {
+
+      double[] cpuImageCorrespondence2D3D = new double[]{0,0,0,0,0};
+
+      cpuImageCorrespondence2D3D[0] = tempCPUImageCorrespondenceXY.get(i)[0];
+      cpuImageCorrespondence2D3D[1] = tempCPUImageCorrespondenceXY.get(i)[1];
+      cpuImageCorrespondence2D3D[2] = correspondences.get(i)[2];
+      cpuImageCorrespondence2D3D[3] = correspondences.get(i)[3];
+      cpuImageCorrespondence2D3D[4] = correspondences.get(i)[4];
+
+      cpuImageCorrespondences.add(cpuImageCorrespondence2D3D);
+
+    }
+
+    return cpuImageCorrespondences;
   }
 
   private ArrayList<double[]> get2D3DCorrespondences(FloatBuffer points3D, float[] viewmtx, float[] projmtx) {
@@ -481,14 +522,14 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
   }
 
-  private void writeCorrespondences(ArrayList<double[]> correspondences) throws IOException {
+  private void writeCorrespondences(ArrayList<double[]> correspondences, String filename) throws IOException {
     String txt = "";
 
     for (double[] correspondence : correspondences){
       txt = txt.concat(correspondence[0] + " " + correspondence[1] + " " + correspondence[2] + " " + correspondence[3] + " " + correspondence[4] + "\n");
     }
 
-    File arrayFile = new File(Environment.getExternalStorageDirectory().toString() + "/data_ar/correspondences.txt");
+    File arrayFile = new File(Environment.getExternalStorageDirectory().toString() + "/data_ar/"+filename+".txt");
     FileOutputStream outputStream = new FileOutputStream(arrayFile);
 
     outputStream.write(txt.getBytes(Charset.forName("UTF-8")));

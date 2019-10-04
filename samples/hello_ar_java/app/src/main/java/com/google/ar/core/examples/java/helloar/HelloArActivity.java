@@ -98,9 +98,6 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   private TapHelper tapHelper;
 
   private final BackgroundRenderer backgroundRenderer = new BackgroundRenderer();
-  private final ObjectRenderer virtualObject = new ObjectRenderer();
-  private final ObjectRenderer virtualObjectShadow = new ObjectRenderer();
-  private final PlaneRenderer planeRenderer = new PlaneRenderer();
   private final PointCloudRenderer pointCloudRenderer = new PointCloudRenderer();
 
   // Temporary matrix allocated here to reduce number of allocations for each frame.
@@ -109,6 +106,9 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
   private static final String SEARCHING_PLANE_MESSAGE = "Searching for surfaces...";
   private FloatBuffer pointCloudCopy = null;
+
+  private int glViewportWidth = 0;
+  private int glViewportHeight = 0;
 
   // Anchors created from taps used for object placing with a given color.
   private static class ColoredAnchor {
@@ -257,16 +257,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     try {
       // Create the texture and pass it to ARCore session to be filled during update().
       backgroundRenderer.createOnGlThread(/*context=*/ this);
-      planeRenderer.createOnGlThread(/*context=*/ this, "models/trigrid.png");
       pointCloudRenderer.createOnGlThread(/*context=*/ this);
-
-      virtualObject.createOnGlThread(/*context=*/ this, "models/andy.obj", "models/andy.png");
-      virtualObject.setMaterialProperties(0.0f, 2.0f, 0.5f, 6.0f);
-
-      virtualObjectShadow.createOnGlThread(
-          /*context=*/ this, "models/andy_shadow.obj", "models/andy_shadow.png");
-      virtualObjectShadow.setBlendMode(BlendMode.Shadow);
-      virtualObjectShadow.setMaterialProperties(1.0f, 0.0f, 0.0f, 1.0f);
 
     } catch (IOException e) {
       Log.e(TAG, "Failed to read an asset file", e);
@@ -277,6 +268,8 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   public void onSurfaceChanged(GL10 gl, int width, int height) {
     displayRotationHelper.onSurfaceChanged(width, height);
     GLES20.glViewport(0, 0, width, height);
+    glViewportWidth = width;
+    glViewportHeight = height;
   }
 
   @Override
@@ -386,6 +379,9 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       float[] projmtx = new float[16];
       camera.getProjectionMatrix(projmtx, 0, 0.1f, 100.0f);
 
+      float[] projmtxFromFrame = new float[16];
+      frame.getCamera().getProjectionMatrix(projmtxFromFrame, 0, 0.1f, 100.0f);
+
       // Get camera matrix.
       float[] viewmtx = new float[16];
       camera.getViewMatrix(viewmtx, 0);
@@ -415,6 +411,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
         writeMatrixToFile(viewmtx, "viewmtx");
         writeMatrixToFile(projmtx, "projmtx");
+        writeMatrixToFile(projmtxFromFrame, "projmtxFromFrame");
 
         writeMatrixToFile(posemtx_android_sensor, "posemtx_android_sensor");
         writeMatrixToFile(posemtx_oriented, "posemtx_oriented");
@@ -551,8 +548,8 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       ndcPoint[0] = ndcPoint[0] / ndcPoint[3];
       ndcPoint[1] = ndcPoint[1] / ndcPoint[3];
 
-      screenPoint[0] = 1440 * ((ndcPoint[0] + 1.0) / 2.0);
-      screenPoint[1] = 2880 * ((1.0 - ndcPoint[1]) / 2.0);
+      screenPoint[0] = glViewportWidth * ((ndcPoint[0] + 1.0) / 2.0);
+      screenPoint[1] = glViewportHeight * ((1.0 - ndcPoint[1]) / 2.0);
 
       correspondence2D3D[0] = screenPoint[0];
       correspondence2D3D[1] = screenPoint[1];
@@ -583,8 +580,8 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   }
 
   public void takeScreenshot(GL10 gl) throws IOException {
-    int w = 1440;
-    int h = 2880;
+    int w = glViewportWidth;
+    int h = glViewportHeight;
     int bitmapBuffer[] = new int[w * h];
     int bitmapSource[] = new int[w * h];
 

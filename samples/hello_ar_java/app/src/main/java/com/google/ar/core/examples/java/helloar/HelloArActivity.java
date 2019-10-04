@@ -17,6 +17,9 @@
 package com.google.ar.core.examples.java.helloar;
 
 import android.graphics.Bitmap;
+import android.graphics.ImageFormat;
+import android.graphics.Rect;
+import android.graphics.YuvImage;
 import android.media.Image;
 import android.opengl.GLES20;
 import android.opengl.GLException;
@@ -32,6 +35,7 @@ import com.google.ar.core.Anchor;
 import com.google.ar.core.ArCoreApk;
 import com.google.ar.core.Camera;
 import com.google.ar.core.CameraConfig;
+import com.google.ar.core.CameraIntrinsics;
 import com.google.ar.core.Config;
 import com.google.ar.core.Coordinates2d;
 import com.google.ar.core.Frame;
@@ -58,9 +62,13 @@ import com.google.ar.core.exceptions.UnavailableDeviceNotCompatibleException;
 import com.google.ar.core.exceptions.UnavailableSdkTooOldException;
 import com.google.ar.core.exceptions.UnavailableUserDeclinedInstallationException;
 
+import java.io.BufferedOutputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.nio.charset.Charset;
@@ -369,7 +377,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   }
 
   // Handle only one tap per frame, as taps are usually low frequency compared to frame rate.
-  private void handleTap(Frame frame, Camera camera, GL10 gl, FloatBuffer pointCloud) {
+  private void handleTap(Frame frame, Camera camera, GL10 gl, FloatBuffer pointCloud) throws NotYetAvailableException {
     MotionEvent tap = tapHelper.poll();
 
     if (tap != null && camera.getTrackingState() == TrackingState.TRACKING) {
@@ -392,18 +400,18 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       float[] posemtx_plain = new float[16];
       frame.getCamera().getPose().toMatrix(posemtx_plain,0);
 
+      CameraIntrinsics cpuCameraIntrinsics = frame.getCamera().getImageIntrinsics();
+
       FloatBuffer pointCloudCopyCopy = pointCloud.duplicate();
       ArrayList<double[]> correspondences = get2D3DCorrespondences(pointCloud, viewmtx, projmtx);
 
       ArrayList<double[]> cpuImageCorrespondences = getCPUImageCorrespondences(frame, correspondences);
 
-      try {
-        Image frameImage = frame.acquireCameraImage();
-      } catch (NotYetAvailableException e) {
-        e.printStackTrace();
-      }
+      Image frameImage = frame.acquireCameraImage();
 
       try {
+        
+        writeIntrinsicsToFile(cpuCameraIntrinsics, "cpuCameraIntrinsics");
 
         writeMatrixToFile(viewmtx, "viewmtx");
         writeMatrixToFile(projmtx, "projmtx");
@@ -419,11 +427,48 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
         takeScreenshot(gl);
 
+        saveCPUFrameJPEG(frameImage);
+
       } catch (IOException e) {
         e.printStackTrace();
       }
 
     }
+  }
+
+  private void writeIntrinsicsToFile(CameraIntrinsics intrinsics, String filename) throws IOException {
+    float[] values = new float[9];
+    values[0] = intrinsics.getFocalLength()[0];
+    values[1] = 0;
+    values[2] = intrinsics.getPrincipalPoint()[0];
+    values[3] = 0;
+    values[4] = intrinsics.getFocalLength()[1];
+    values[5] = intrinsics.getPrincipalPoint()[1];
+    values[6] = 0;
+    values[7] = 0;
+    values[8] = 1;
+
+    String matrixString = values[0] + " " + values[1] + " " + values[2] + "\n" +
+                          values[3] + " " + values[4] + " " + values[5] + "\n" +
+                          values[6] + " " + values[7] + " " + values[8] + "\n";
+
+    File matrixFile = new File(Environment.getExternalStorageDirectory().toString() + "/data_ar/" + filename + ".txt");
+    FileOutputStream outputStream = new FileOutputStream(matrixFile);
+
+    outputStream.write(matrixString.getBytes(Charset.forName("UTF-8")));
+    outputStream.flush();
+    outputStream.close();
+  }
+
+  private void saveCPUFrameJPEG(Image frameImage) throws IOException {
+    byte[] imageData = NV21toJPEG(YUV_420_888toNV21(frameImage),
+            frameImage.getWidth(), frameImage.getHeight());
+
+    String path = Environment.getExternalStorageDirectory().toString() + "/data_ar/cpuFrame.jpg";
+    BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(path));
+    bos.write(imageData);
+    bos.flush();
+    bos.close();
   }
 
   private ArrayList<double[]> getCPUImageCorrespondences(Frame frame, ArrayList<double[]> correspondences) {
@@ -443,7 +488,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
     ArrayList<double[]> tempCPUImageCorrespondenceXY = new ArrayList<>();
 
-    for (int i = 0; i < xyCPU.length; i++) {
+    for (int i = 0; i < xyCPU.length; i+=2) {
 
       double[] cpuImageCorrespondenceXY = new double[]{0,0};
 
@@ -453,7 +498,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       tempCPUImageCorrespondenceXY.add(cpuImageCorrespondenceXY);
     }
 
-    for (int i = 0; i < correspondences.size(); i++) {
+    for (int i = 0; i < tempCPUImageCorrespondenceXY.size(); i++) {
 
       double[] cpuImageCorrespondence2D3D = new double[]{0,0,0,0,0};
 
@@ -604,6 +649,33 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     outputStream.write(matrixString.getBytes(Charset.forName("UTF-8")));
     outputStream.flush();
     outputStream.close();
+  }
+
+  private byte[] NV21toJPEG(byte[] nv21, int width, int height) {
+    ByteArrayOutputStream out = new ByteArrayOutputStream();
+    YuvImage yuv = new YuvImage(nv21, ImageFormat.NV21, width, height, null);
+    yuv.compressToJpeg(new Rect(0, 0, width, height), 100, out);
+    return out.toByteArray();
+  }
+
+  private byte[] YUV_420_888toNV21(Image image) {
+    byte[] nv21;
+    ByteBuffer yBuffer = image.getPlanes()[0].getBuffer();
+    ByteBuffer uBuffer = image.getPlanes()[1].getBuffer();
+    ByteBuffer vBuffer = image.getPlanes()[2].getBuffer();
+
+    int ySize = yBuffer.remaining();
+    int uSize = uBuffer.remaining();
+    int vSize = vBuffer.remaining();
+
+    nv21 = new byte[ySize + uSize + vSize];
+
+    //U and V are swapped
+    yBuffer.get(nv21, 0, ySize);
+    vBuffer.get(nv21, ySize, vSize);
+    uBuffer.get(nv21, ySize + vSize, uSize);
+
+    return nv21;
   }
 
   /** Checks if we detected at least one plane. */

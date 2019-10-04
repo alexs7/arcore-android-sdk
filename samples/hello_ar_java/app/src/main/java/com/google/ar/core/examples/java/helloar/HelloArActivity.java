@@ -477,8 +477,8 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
     for (int i = 0; i < correspondences.size(); i++) {
 
-      xyVIEW[i] = (float) correspondences.get(i)[0];
-      xyVIEW[i+1] = (float) correspondences.get(i)[1];
+      xyVIEW[2*i] = (float) correspondences.get(i)[0];
+      xyVIEW[2*i+1] = (float) correspondences.get(i)[1];
     }
 
     frame.transformCoordinates2d(Coordinates2d.VIEW, xyVIEW, Coordinates2d.IMAGE_PIXELS, xyCPU);

@@ -25,6 +25,7 @@ import android.opengl.GLES20;
 import android.opengl.GLException;
 import android.opengl.GLSurfaceView;
 import android.opengl.Matrix;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Environment;
 import android.support.v7.app.AppCompatActivity;
@@ -50,9 +51,6 @@ import com.google.ar.core.examples.java.common.helpers.SnackbarHelper;
 import com.google.ar.core.examples.java.common.helpers.TapHelper;
 import com.google.ar.core.examples.java.common.helpers.TrackingStateHelper;
 import com.google.ar.core.examples.java.common.rendering.BackgroundRenderer;
-import com.google.ar.core.examples.java.common.rendering.ObjectRenderer;
-import com.google.ar.core.examples.java.common.rendering.ObjectRenderer.BlendMode;
-import com.google.ar.core.examples.java.common.rendering.PlaneRenderer;
 import com.google.ar.core.examples.java.common.rendering.PointCloudRenderer;
 import com.google.ar.core.exceptions.CameraNotAvailableException;
 import com.google.ar.core.exceptions.NotYetAvailableException;
@@ -65,7 +63,6 @@ import com.google.ar.core.exceptions.UnavailableUserDeclinedInstallationExceptio
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -74,9 +71,19 @@ import java.nio.IntBuffer;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
+
+import okhttp3.Call;
+import okhttp3.Callback;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
 
 /**
  * This is a simple example that shows how to create an augmented reality (AR) application using the
@@ -105,10 +112,18 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   private static final float[] DEFAULT_COLOR = new float[] {0f, 0f, 0f, 0f};
 
   private static final String SEARCHING_PLANE_MESSAGE = "Searching for surfaces...";
-  private FloatBuffer pointCloudCopy = null;
 
   private int glViewportWidth = 0;
   private int glViewportHeight = 0;
+
+  private OkHttpClient client;
+  private NetworkTask networkTask;
+  private static final String IP_ADDRESS = "138.38.173.225";
+  private volatile Frame frame;
+  private volatile float[] projmtx;
+  private volatile float[] viewmtx;
+  private volatile FloatBuffer pointCloudCopy;
+  private volatile Camera camera;
 
   // Anchors created from taps used for object placing with a given color.
   private static class ColoredAnchor {
@@ -143,6 +158,14 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     surfaceView.setWillNotDraw(false);
 
     installRequested = false;
+
+    client = new OkHttpClient.Builder()
+            .connectTimeout(50, TimeUnit.SECONDS)
+            .writeTimeout(50, TimeUnit.SECONDS)
+            .readTimeout(70, TimeUnit.SECONDS)
+            .build();
+
+    networkTask = new NetworkTask();
   }
 
   @Override
@@ -272,6 +295,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     glViewportHeight = height;
   }
 
+  //insert here the timing appoach that Mark suggested - compare times before and after and send every 500 ms
   @Override
   public void onDrawFrame(GL10 gl) {
     // Clear screen to notify driver it should not load any pixels from previous frame.
@@ -290,8 +314,8 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       // Obtain the current frame from ARSession. When the configuration is set to
       // UpdateMode.BLOCKING (it is by default), this will throttle the rendering to the
       // camera framerate.
-      Frame frame = session.update();
-      Camera camera = frame.getCamera();
+      frame = session.update();
+      camera = frame.getCamera();
 
       // If frame is ready, render camera preview image to the GL surface.
       backgroundRenderer.draw(frame);
@@ -307,11 +331,11 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       }
 
       // Get projection matrix.
-      float[] projmtx = new float[16];
+      projmtx = new float[16];
       camera.getProjectionMatrix(projmtx, 0, 0.1f, 100.0f);
 
       // Get camera matrix and draw.
-      float[] viewmtx = new float[16];
+      viewmtx = new float[16];
       camera.getViewMatrix(viewmtx, 0);
 
       // Compute lighting from average intensity of the image.
@@ -326,7 +350,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
         pointCloudCopy = pointCloud.getPoints().duplicate();
 
-        pointCloudRenderer.update(pointCloud);
+        pointCloudRenderer.update(pointCloud); // this "uses" up the pointcloud
         pointCloudRenderer.draw(viewmtx, projmtx);
 
         // Handle one tap per frame.
@@ -342,27 +366,6 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
         messageSnackbarHelper.showMessage(this, SEARCHING_PLANE_MESSAGE);
       }
 
-      // Visualize planes.
-//      planeRenderer.drawPlanes(
-//          session.getAllTrackables(Plane.class), camera.getDisplayOrientedPose(), projmtx);
-
-      // Visualize anchors created by touch.
-//      float scaleFactor = 1.0f;
-//      for (ColoredAnchor coloredAnchor : anchors) {
-//        if (coloredAnchor.anchor.getTrackingState() != TrackingState.TRACKING) {
-//          continue;
-//        }
-//        // Get the current pose of an Anchor in world space. The Anchor pose is updated
-//        // during calls to session.update() as ARCore refines its estimate of the world.
-//        coloredAnchor.anchor.getPose().toMatrix(anchorMatrix, 0);
-//
-//        // Update and draw the model and its shadow.
-//        virtualObject.updateModelMatrix(anchorMatrix, scaleFactor);
-//        virtualObjectShadow.updateModelMatrix(anchorMatrix, scaleFactor);
-//        virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, coloredAnchor.color);
-//        virtualObjectShadow.draw(viewmtx, projmtx, colorCorrectionRgba, coloredAnchor.color);
-//      }
-
     } catch (Throwable t) {
       // Avoid crashing the application due to unhandled exceptions.
       Log.e(TAG, "Exception on the OpenGL thread", t);
@@ -375,60 +378,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
     if (tap != null && camera.getTrackingState() == TrackingState.TRACKING) {
 
-      // Get projection matrix.
-      float[] projmtx = new float[16];
-      camera.getProjectionMatrix(projmtx, 0, 0.1f, 100.0f);
-
-      float[] projmtxFromFrame = new float[16];
-      frame.getCamera().getProjectionMatrix(projmtxFromFrame, 0, 0.1f, 100.0f);
-
-      // Get camera matrix.
-      float[] viewmtx = new float[16];
-      camera.getViewMatrix(viewmtx, 0);
-
-      // Get pose matrices.
-      float[] posemtx_android_sensor = new float[16];
-      frame.getAndroidSensorPose().toMatrix(posemtx_android_sensor,0);
-
-      float[] posemtx_oriented = new float[16];
-      frame.getCamera().getDisplayOrientedPose().toMatrix(posemtx_oriented,0);
-
-      float[] posemtx_plain = new float[16];
-      frame.getCamera().getPose().toMatrix(posemtx_plain,0);
-
-      CameraIntrinsics cpuCameraIntrinsics = frame.getCamera().getImageIntrinsics();
-
-      FloatBuffer pointCloudCopyCopy = pointCloud.duplicate();
-      ArrayList<double[]> correspondences = get2D3DCorrespondences(pointCloud, viewmtx, projmtx);
-
-      ArrayList<double[]> cpuImageCorrespondences = getCPUImageCorrespondences(frame, correspondences);
-
-      Image frameImage = frame.acquireCameraImage();
-
-      try {
-        
-        writeIntrinsicsToFile(cpuCameraIntrinsics, "cpuCameraIntrinsics");
-
-        writeMatrixToFile(viewmtx, "viewmtx");
-        writeMatrixToFile(projmtx, "projmtx");
-        writeMatrixToFile(projmtxFromFrame, "projmtxFromFrame");
-
-        writeMatrixToFile(posemtx_android_sensor, "posemtx_android_sensor");
-        writeMatrixToFile(posemtx_oriented, "posemtx_oriented");
-        writeMatrixToFile(posemtx_plain, "posemtx_plain");
-
-        write3DPoints(pointCloudCopyCopy);
-
-        writeCorrespondences(correspondences, "correspondences" );
-        writeCorrespondences(cpuImageCorrespondences, "cpuImageCorrespondences");
-
-        takeScreenshot(gl);
-
-        saveCPUFrameJPEG(frameImage);
-
-      } catch (IOException e) {
-        e.printStackTrace();
-      }
+      networkTask.execute();
 
     }
   }
@@ -457,11 +407,11 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     outputStream.close();
   }
 
-  private void saveCPUFrameJPEG(Image frameImage) throws IOException {
+  private void saveCPUFrameJPEG(Image frameImage, String filename) throws IOException {
     byte[] imageData = NV21toJPEG(YUV_420_888toNV21(frameImage),
             frameImage.getWidth(), frameImage.getHeight());
 
-    String path = Environment.getExternalStorageDirectory().toString() + "/data_ar/cpuFrame.jpg";
+    String path = Environment.getExternalStorageDirectory().toString() + "/data_ar/frame_"+filename+".jpg";
     BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(path));
     bos.write(imageData);
     bos.flush();
@@ -684,4 +634,61 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     }
     return false;
   }
+
+  private class FrameData {
+
+
+
+    public void set2D3DCorrespondences(FloatBuffer pointCloudCopy, float[] viewmtx, float[] projmtx) {
+
+
+    }
+
+
+  }
+
+  private class NetworkTask extends AsyncTask<FrameData, Integer, Void> {
+
+    protected Void doInBackground(FrameData... frameData) {
+
+      while(!this.isCancelled()) {
+
+        System.out.println("AsyncTask Called!");
+
+        if (camera.getTrackingState() == TrackingState.TRACKING) {
+
+          Long tsLong = System.currentTimeMillis() / 1000;
+          String timestamp = tsLong.toString();
+
+          ArrayList<double[]> correspondences = get2D3DCorrespondences(pointCloudCopy, viewmtx, projmtx);
+          ArrayList<double[]> cpuImageCorrespondences = getCPUImageCorrespondences(frame, correspondences);
+
+          try {
+            writeCorrespondences(cpuImageCorrespondences, "cpuImageCorrespondences_" + timestamp);
+          } catch (IOException e) {
+            e.printStackTrace();
+          }
+
+          Image frameImage = null;
+          try {
+//            frameImage = frame.acquireCameraImage();
+//            saveCPUFrameJPEG(frameImage, timestamp);
+//            frameImage.close();
+          } catch (Exception e) {
+            e.printStackTrace();
+          }
+
+        }
+
+        try {
+          Thread.sleep(100);
+        } catch (InterruptedException e) {
+          e.printStackTrace();
+        }
+
+      }
+      return null;
+    }
+  }
+
 }

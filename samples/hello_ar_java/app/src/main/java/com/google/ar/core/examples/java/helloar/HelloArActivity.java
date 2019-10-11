@@ -76,14 +76,7 @@ import java.util.concurrent.TimeUnit;
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
 
-import okhttp3.Call;
-import okhttp3.Callback;
-import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.RequestBody;
-import okhttp3.Response;
-import okhttp3.ResponseBody;
 
 /**
  * This is a simple example that shows how to create an augmented reality (AR) application using the
@@ -117,13 +110,10 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   private int glViewportHeight = 0;
 
   private OkHttpClient client;
-  private NetworkTask networkTask;
   private static final String IP_ADDRESS = "138.38.173.225";
-  private volatile Frame frame;
-  private volatile float[] projmtx;
-  private volatile float[] viewmtx;
-  private volatile FloatBuffer pointCloudCopy;
-  private volatile Camera camera;
+  private long startTime = 0;
+  private static final int TIME_DELAY = 700;
+  private boolean startRecording = false;
 
   // Anchors created from taps used for object placing with a given color.
   private static class ColoredAnchor {
@@ -165,7 +155,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
             .readTimeout(70, TimeUnit.SECONDS)
             .build();
 
-    networkTask = new NetworkTask();
+    startTime = System.currentTimeMillis();
   }
 
   @Override
@@ -298,6 +288,9 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   //insert here the timing appoach that Mark suggested - compare times before and after and send every 500 ms
   @Override
   public void onDrawFrame(GL10 gl) {
+
+    long nowTime = System.currentTimeMillis();
+
     // Clear screen to notify driver it should not load any pixels from previous frame.
     GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT | GLES20.GL_DEPTH_BUFFER_BIT);
 
@@ -309,13 +302,14 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     displayRotationHelper.updateSessionIfNeeded(session);
 
     try {
+
       session.setCameraTextureName(backgroundRenderer.getTextureId());
 
       // Obtain the current frame from ARSession. When the configuration is set to
       // UpdateMode.BLOCKING (it is by default), this will throttle the rendering to the
       // camera framerate.
-      frame = session.update();
-      camera = frame.getCamera();
+      Frame frame = session.update();
+      Camera camera = frame.getCamera();
 
       // If frame is ready, render camera preview image to the GL surface.
       backgroundRenderer.draw(frame);
@@ -331,11 +325,11 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       }
 
       // Get projection matrix.
-      projmtx = new float[16];
+      float[] projmtx = new float[16];
       camera.getProjectionMatrix(projmtx, 0, 0.1f, 100.0f);
 
       // Get camera matrix and draw.
-      viewmtx = new float[16];
+      float[] viewmtx = new float[16];
       camera.getViewMatrix(viewmtx, 0);
 
       // Compute lighting from average intensity of the image.
@@ -348,13 +342,40 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       // Use try-with-resources to automatically release the point cloud.
       try (PointCloud pointCloud = frame.acquirePointCloud()) {
 
-        pointCloudCopy = pointCloud.getPoints().duplicate();
+        FloatBuffer pointCloudCopy = pointCloud.getPoints().duplicate();
 
         pointCloudRenderer.update(pointCloud); // this "uses" up the pointcloud
         pointCloudRenderer.draw(viewmtx, projmtx);
 
         // Handle one tap per frame.
         handleTap(frame, camera, gl, pointCloudCopy);
+
+        long elapsedTime = nowTime - startTime;
+
+        if(elapsedTime > TIME_DELAY && startRecording == true) {
+          Long tsLong = System.currentTimeMillis() / 1000;
+          String timestamp = tsLong.toString();
+
+          ArrayList<double[]> correspondences = get2D3DCorrespondences(pointCloudCopy, viewmtx, projmtx);
+          ArrayList<double[]> cpuImageCorrespondences = getCPUImageCorrespondences(frame, correspondences);
+
+          try {
+            writeCorrespondences(cpuImageCorrespondences, "cpuImageCorrespondences_" + timestamp);
+          } catch (IOException e) {
+            e.printStackTrace();
+          }
+
+          Image frameImage = null;
+          try {
+            frameImage = frame.acquireCameraImage();
+            saveCPUFrameJPEG(frameImage, timestamp);
+            frameImage.close();
+          } catch (Exception e) {
+            e.printStackTrace();
+          }
+
+          startTime = System.currentTimeMillis();
+        }
 
       }
 
@@ -377,9 +398,13 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     MotionEvent tap = tapHelper.poll();
 
     if (tap != null && camera.getTrackingState() == TrackingState.TRACKING) {
-
-      networkTask.execute();
-
+      if(startRecording){
+        System.out.println("Not Saving Data");
+        startRecording = false;
+      }else {
+        System.out.println("Saving Data");
+        startRecording = true;
+      }
     }
   }
 
@@ -637,57 +662,17 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
   private class FrameData {
 
+    public Frame frame;
+    public FloatBuffer pointCloud;
+    public float[] viewmtx;
+    public float[] projmtx;
 
-
-    public void set2D3DCorrespondences(FloatBuffer pointCloudCopy, float[] viewmtx, float[] projmtx) {
-
-
-    }
-
-
-  }
-
-  private class NetworkTask extends AsyncTask<FrameData, Integer, Void> {
-
-    protected Void doInBackground(FrameData... frameData) {
-
-      while(!this.isCancelled()) {
-
-        System.out.println("AsyncTask Called!");
-
-        if (camera.getTrackingState() == TrackingState.TRACKING) {
-
-          Long tsLong = System.currentTimeMillis() / 1000;
-          String timestamp = tsLong.toString();
-
-          ArrayList<double[]> correspondences = get2D3DCorrespondences(pointCloudCopy, viewmtx, projmtx);
-          ArrayList<double[]> cpuImageCorrespondences = getCPUImageCorrespondences(frame, correspondences);
-
-          try {
-            writeCorrespondences(cpuImageCorrespondences, "cpuImageCorrespondences_" + timestamp);
-          } catch (IOException e) {
-            e.printStackTrace();
-          }
-
-          Image frameImage = null;
-          try {
-//            frameImage = frame.acquireCameraImage();
-//            saveCPUFrameJPEG(frameImage, timestamp);
-//            frameImage.close();
-          } catch (Exception e) {
-            e.printStackTrace();
-          }
-
-        }
-
-        try {
-          Thread.sleep(100);
-        } catch (InterruptedException e) {
-          e.printStackTrace();
-        }
-
-      }
-      return null;
+    public FrameData(Frame frame, FloatBuffer pointCloud,
+                     float[] viewmtx, float[] projmtx) {
+      this.frame = frame;
+      this.pointCloud = pointCloud;
+      this.viewmtx = viewmtx;
+      this.projmtx = projmtx;
     }
   }
 

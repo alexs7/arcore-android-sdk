@@ -25,12 +25,12 @@ import android.opengl.GLES20;
 import android.opengl.GLException;
 import android.opengl.GLSurfaceView;
 import android.opengl.Matrix;
-import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Environment;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.MotionEvent;
+import android.widget.TextView;
 import android.widget.Toast;
 import com.google.ar.core.Anchor;
 import com.google.ar.core.ArCoreApk;
@@ -112,8 +112,14 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   private OkHttpClient client;
   private static final String IP_ADDRESS = "138.38.173.225";
   private long startTime = 0;
-  private static final int TIME_DELAY = 700;
-  private boolean startRecording = false;
+  private static final int TIME_DELAY = 400;
+  private boolean isRecording = false;
+  private TextView cameraIntrinsicsTextView;
+  private static final float RADIANS_TO_DEGREES = (float) (180 / Math.PI);
+  private static final String DEBUG_TEXT_FORMAT =
+                  "Correspondences: %d \n" +
+                          "CPU Correspondences: %d \n" +
+                          "Saving Frames: %d \n"; // %d might not be correct for a boolean ?
 
   // Anchors created from taps used for object placing with a given color.
   private static class ColoredAnchor {
@@ -147,6 +153,8 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     surfaceView.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);
     surfaceView.setWillNotDraw(false);
 
+    cameraIntrinsicsTextView = findViewById(R.id.camera_intrinsics_view);
+
     installRequested = false;
 
     client = new OkHttpClient.Builder()
@@ -156,6 +164,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
             .build();
 
     startTime = System.currentTimeMillis();
+    deleteFiles("data_ar");
   }
 
   @Override
@@ -352,39 +361,41 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
         long elapsedTime = nowTime - startTime;
 
-        if(elapsedTime > TIME_DELAY && startRecording == true) {
+        if(elapsedTime > TIME_DELAY && isRecording == true) {
           Long tsLong = System.currentTimeMillis() / 1000;
           String timestamp = tsLong.toString();
 
           ArrayList<double[]> correspondences = get2D3DCorrespondences(pointCloudCopy, viewmtx, projmtx);
-          ArrayList<double[]> cpuImageCorrespondences = getCPUImageCorrespondences(frame, correspondences);
 
-          try {
-            writeCorrespondences(cpuImageCorrespondences, "cpuImageCorrespondences_" + timestamp);
-          } catch (IOException e) {
-            e.printStackTrace();
-          }
+          if(correspondences.size() > 4) {
 
-          Image frameImage = null;
-          try {
-            frameImage = frame.acquireCameraImage();
-            saveCPUFrameJPEG(frameImage, timestamp);
-            frameImage.close();
-          } catch (Exception e) {
-            e.printStackTrace();
+            ArrayList<double[]> cpuImageCorrespondences = getCPUImageCorrespondences(frame, correspondences);
+
+            runOnUiThread(() -> cameraIntrinsicsTextView.setText(getCameraIntrinsicsText(
+                                                                  correspondences.size(),
+                                                                  cpuImageCorrespondences.size(), isRecording)));
+
+            try {
+              writeLog(correspondences, cpuImageCorrespondences, timestamp);
+              writeCorrespondences(cpuImageCorrespondences, "cpuImageCorrespondences_" + timestamp);
+            } catch (IOException e) {
+              e.printStackTrace();
+            }
+
+            Image frameImage = null;
+            try {
+              frameImage = frame.acquireCameraImage();
+              saveCPUFrameJPEG(frameImage, timestamp);
+              frameImage.close();
+            } catch (Exception e) {
+              e.printStackTrace();
+            }
+
           }
 
           startTime = System.currentTimeMillis();
         }
 
-      }
-
-      // No tracking error at this point. If we detected any plane, then hide the
-      // message UI, otherwise show searchingPlane message.
-      if (hasTrackingPlane()) {
-        messageSnackbarHelper.hide(this);
-      } else {
-        messageSnackbarHelper.showMessage(this, SEARCHING_PLANE_MESSAGE);
       }
 
     } catch (Throwable t) {
@@ -398,12 +409,11 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     MotionEvent tap = tapHelper.poll();
 
     if (tap != null && camera.getTrackingState() == TrackingState.TRACKING) {
-      if(startRecording){
-        System.out.println("Not Saving Data");
-        startRecording = false;
+      if(isRecording){
+        System.out.println();
+        isRecording = false;
       }else {
-        System.out.println("Saving Data");
-        startRecording = true;
+        isRecording = true;
       }
     }
   }
@@ -554,6 +564,19 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     outputStream.close();
   }
 
+  private void writeLog(ArrayList<double[]> correspondences, ArrayList<double[]> cpuImageCorrespondences, String timestamp) throws IOException {
+
+    String txt = correspondences.size() + " " + cpuImageCorrespondences.size();
+
+    File logFile = new File(Environment.getExternalStorageDirectory().toString() + "/data_ar/log_file_"+timestamp+".txt");
+    FileOutputStream outputStream = new FileOutputStream(logFile);
+
+    outputStream.write(txt.getBytes(Charset.forName("UTF-8")));
+    outputStream.flush();
+    outputStream.close();
+
+  }
+
   public void takeScreenshot(GL10 gl) throws IOException {
     int w = glViewportWidth;
     int h = glViewportHeight;
@@ -660,20 +683,19 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     return false;
   }
 
-  private class FrameData {
-
-    public Frame frame;
-    public FloatBuffer pointCloud;
-    public float[] viewmtx;
-    public float[] projmtx;
-
-    public FrameData(Frame frame, FloatBuffer pointCloud,
-                     float[] viewmtx, float[] projmtx) {
-      this.frame = frame;
-      this.pointCloud = pointCloud;
-      this.viewmtx = viewmtx;
-      this.projmtx = projmtx;
+  private void deleteFiles(String path) {
+    File dir = new File(Environment.getExternalStorageDirectory()+"/"+path);
+    if (dir.isDirectory())
+    {
+      String[] children = dir.list();
+      for (int i = 0; i < children.length; i++)
+      {
+        new File(dir, children[i]).delete();
+      }
     }
   }
 
+  private String getCameraIntrinsicsText(int s1, int s2, boolean isRecording) {
+    return String.format(DEBUG_TEXT_FORMAT,s1,s2,isRecording);
+  }
 }

@@ -117,9 +117,9 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   private TextView cameraIntrinsicsTextView;
   private static final float RADIANS_TO_DEGREES = (float) (180 / Math.PI);
   private static final String DEBUG_TEXT_FORMAT =
-                  "Correspondences: %d \n" +
-                          "CPU Correspondences: %d \n" +
-                          "Saving Frames: %d \n"; // %d might not be correct for a boolean ?
+                  "Correspondences: %d\n" +
+                          "CPU Correspondences: %d\n" +
+                          "Saving Frames: %s\n"; // %d might not be correct for a boolean ?
 
   // Anchors created from taps used for object placing with a given color.
   private static class ColoredAnchor {
@@ -370,7 +370,6 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
           if(correspondences.size() > 4) {
 
             ArrayList<double[]> cpuImageCorrespondences = getCPUImageCorrespondences(frame, correspondences);
-
             runOnUiThread(() -> cameraIntrinsicsTextView.setText(getCameraIntrinsicsText(
                                                                   correspondences.size(),
                                                                   cpuImageCorrespondences.size(), isRecording)));

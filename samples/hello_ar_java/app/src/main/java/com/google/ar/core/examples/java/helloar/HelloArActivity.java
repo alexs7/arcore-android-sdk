@@ -42,6 +42,7 @@ import com.google.ar.core.Coordinates2d;
 import com.google.ar.core.Frame;
 import com.google.ar.core.Plane;
 import com.google.ar.core.PointCloud;
+import com.google.ar.core.Pose;
 import com.google.ar.core.Session;
 import com.google.ar.core.TrackingState;
 import com.google.ar.core.examples.java.common.helpers.CameraPermissionHelper;
@@ -51,6 +52,7 @@ import com.google.ar.core.examples.java.common.helpers.SnackbarHelper;
 import com.google.ar.core.examples.java.common.helpers.TapHelper;
 import com.google.ar.core.examples.java.common.helpers.TrackingStateHelper;
 import com.google.ar.core.examples.java.common.rendering.BackgroundRenderer;
+import com.google.ar.core.examples.java.common.rendering.ObjectRenderer;
 import com.google.ar.core.examples.java.common.rendering.PointCloudRenderer;
 import com.google.ar.core.exceptions.CameraNotAvailableException;
 import com.google.ar.core.exceptions.NotYetAvailableException;
@@ -98,6 +100,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   private TapHelper tapHelper;
 
   private final BackgroundRenderer backgroundRenderer = new BackgroundRenderer();
+  private final ObjectRenderer virtualObject = new ObjectRenderer();
   private final PointCloudRenderer pointCloudRenderer = new PointCloudRenderer();
 
   // Temporary matrix allocated here to reduce number of allocations for each frame.
@@ -112,7 +115,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   private OkHttpClient client;
   private static final String IP_ADDRESS = "138.38.173.225";
   private long startTime = 0;
-  private static final int TIME_DELAY = 400;
+  private static final int TIME_DELAY = 300;
   private boolean isRecording = false;
   private TextView cameraIntrinsicsTextView;
   private static final float RADIANS_TO_DEGREES = (float) (180 / Math.PI);
@@ -352,6 +355,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       try (PointCloud pointCloud = frame.acquirePointCloud()) {
 
         FloatBuffer pointCloudCopy = pointCloud.getPoints().duplicate();
+        FloatBuffer pointCloudCopyCopy = pointCloud.getPoints().duplicate();
 
         pointCloudRenderer.update(pointCloud); // this "uses" up the pointcloud
         pointCloudRenderer.draw(viewmtx, projmtx);
@@ -359,11 +363,16 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
         // Handle one tap per frame.
         handleTap(frame, camera, gl, pointCloudCopy);
 
+        if(isRecording) renderAnchors(pointCloudCopyCopy);
+
         long elapsedTime = nowTime - startTime;
 
         if(elapsedTime > TIME_DELAY && isRecording == true) {
+
           Long tsLong = System.currentTimeMillis() / 1000;
           String timestamp = tsLong.toString();
+
+          System.out.println("Saving at:" + timestamp);
 
           ArrayList<double[]> correspondences = get2D3DCorrespondences(pointCloudCopy, viewmtx, projmtx);
 
@@ -373,20 +382,22 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
             runOnUiThread(() -> cameraIntrinsicsTextView.setText(getCameraIntrinsicsText(
                                                                   correspondences.size(),
                                                                   cpuImageCorrespondences.size(), isRecording)));
-
-            try {
-              writeLog(correspondences, cpuImageCorrespondences, timestamp);
-              writeCorrespondences(cpuImageCorrespondences, "cpuImageCorrespondences_" + timestamp);
-            } catch (IOException e) {
-              e.printStackTrace();
-            }
-
             Image frameImage = null;
             try {
+
+              writeLog(correspondences, cpuImageCorrespondences, timestamp);
+              writeCorrespondences(cpuImageCorrespondences, "cpuImageCorrespondences_" + timestamp);
+
               frameImage = frame.acquireCameraImage();
               saveCPUFrameJPEG(frameImage, timestamp);
               frameImage.close();
-            } catch (Exception e) {
+
+              float[] poseMatrix = new float[16];
+              Pose cameraPose = camera.getDisplayOrientedPose();
+              cameraPose.toMatrix(poseMatrix,0);
+              writeMatrixToFile(poseMatrix,"displayOrientedPose_"+timestamp);
+
+            } catch (IOException e) {
               e.printStackTrace();
             }
 
@@ -397,9 +408,51 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
       }
 
+      float scaleFactor = 1.0f;
+      for (ColoredAnchor coloredAnchor : anchors) {
+        if (coloredAnchor.anchor.getTrackingState() != TrackingState.TRACKING) {
+          continue;
+        }
+        // Get the current pose of an Anchor in world space. The Anchor pose is updated
+        // during calls to session.update() as ARCore refines its estimate of the world.
+        coloredAnchor.anchor.getPose().toMatrix(anchorMatrix, 0);
+
+        // Update and draw the model and its shadow.
+        virtualObject.updateModelMatrix(anchorMatrix, scaleFactor);
+        virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, coloredAnchor.color);
+      }
+
     } catch (Throwable t) {
       // Avoid crashing the application due to unhandled exceptions.
       Log.e(TAG, "Exception on the OpenGL thread", t);
+    }
+  }
+
+  private void renderAnchors(FloatBuffer pointCloud){
+    while (pointCloud.hasRemaining()) {
+
+      //these two need to be declared here!
+      double[] screenPoint = new double[]{0, 0};
+      double[] correspondence2D3D = new double[]{0, 0, 0, 0, 0};
+
+      float x = pointCloud.get();
+      float y = pointCloud.get();
+      float z = pointCloud.get();
+      float c = pointCloud.get(); //just to get the position moving - not used
+
+      Pose pose = Pose.makeTranslation(x,y,z);
+
+      Anchor anchor = session.createAnchor(pose);
+
+      float[] objColor = new float[]{66.0f, 133.0f, 244.0f, 255.0f};
+
+      if (anchors.size() >= 20) {
+        anchors.get(0).anchor.detach();
+        anchors.remove(0);
+      }
+
+      anchors.add(new ColoredAnchor(anchor, objColor));
+
     }
   }
 
@@ -409,8 +462,10 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
     if (tap != null && camera.getTrackingState() == TrackingState.TRACKING) {
       if(isRecording){
-        System.out.println();
         isRecording = false;
+        runOnUiThread(() -> cameraIntrinsicsTextView.setText(getCameraIntrinsicsText(
+                                                              0,
+                                                              0, isRecording)));
       }else {
         isRecording = true;
       }

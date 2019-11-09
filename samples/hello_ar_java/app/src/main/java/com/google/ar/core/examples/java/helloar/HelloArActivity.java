@@ -125,9 +125,11 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   private static final String DEBUG_TEXT_FORMAT =
                   "Correspondences: %d\n" +
                           "CPU Correspondences: %d\n" +
-                          "Saving Frames: %s\n"; // %d might not be correct for a boolean ?
+                          "Saving Frames: %s\n" +
+                          "Keyframes Saved: %d\n";
   private boolean renderAnchors = true;
   private FancyButton saveKeyFramesButton;
+  private int numberOfKeyframesSaved = 0;
 
   // Anchors created from taps used for object placing with a given color.
   private static class ColoredAnchor {
@@ -168,7 +170,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       if(isSaving){
         isSaving = false;
         saveKeyFramesButton.setText("Save Keyframes");
-        updateStatusTextView(0,0, isSaving);
+        updateStatusTextView(0,0, isSaving, numberOfKeyframesSaved);
       }else {
         saveKeyFramesButton.setText("Saving Keyframes..");
         isSaving = true;
@@ -259,7 +261,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     displayRotationHelper.onResume();
 
     //initial start
-    updateStatusTextView(0, 0, isSaving);
+    updateStatusTextView(0, 0, isSaving, numberOfKeyframesSaved);
   }
 
   @Override
@@ -383,7 +385,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
         pointCloudRenderer.draw(viewmtx, projmtx);
 
         // Handle one tap per frame.
-        handleTap(frame, camera, gl, pointCloudCopy);
+//        handleTap(frame, camera, gl, pointCloudCopy);
 
         //renderAnchors(pointCloudAnchors);
 
@@ -427,8 +429,6 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     ArrayList<double[]> correspondences = get2D3DCorrespondences(pointCloudCopy, viewmtx, projmtx);
     ArrayList<double[]> cpuImageCorrespondences = getCPUImageCorrespondences(frame, correspondences);
 
-    updateStatusTextView(correspondences.size(), cpuImageCorrespondences.size(), isSaving);
-
     if(correspondences.size() > 4) {
 
       Image frameImage = null;
@@ -439,6 +439,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
         frameImage = frame.acquireCameraImage();
         saveCPUFrameJPEG(frameImage, timestamp);
+        numberOfKeyframesSaved ++;
         frameImage.close();
 
         float[] poseOrientedMatrix = new float[16];
@@ -456,6 +457,8 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
         Pose sensorPose = frame.getAndroidSensorPose();
         sensorPose.toMatrix(poseSensorMatrix,0);
         writeMatrixToFile(poseSensorMatrix,"sensorPose_"+timestamp);
+
+        updateStatusTextView(correspondences.size(), cpuImageCorrespondences.size(), isSaving, numberOfKeyframesSaved);
 
       } catch (IOException e) {
         e.printStackTrace();
@@ -534,7 +537,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       if(isSaving){
         isSaving = false;
 
-        updateStatusTextView(0,0, isSaving);
+        updateStatusTextView(0,0, isSaving, numberOfKeyframesSaved);
 
       }else {
         isSaving = true;
@@ -542,8 +545,8 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     }
   }
 
-  private void updateStatusTextView(int s1, int s2, boolean isRecording) {
-    runOnUiThread(() -> cameraIntrinsicsTextView.setText(getCameraIntrinsicsText(s1,s2,isRecording)));
+  private void updateStatusTextView(int s1, int s2, boolean isRecording, int numberOfKeyframesSaved) {
+    runOnUiThread(() -> cameraIntrinsicsTextView.setText(getCameraIntrinsicsText(s1,s2,isRecording, numberOfKeyframesSaved)));
   }
 
   private void writeIntrinsicsToFile(CameraIntrinsics intrinsics, String filename) throws IOException {
@@ -824,7 +827,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     }
   }
 
-  private String getCameraIntrinsicsText(int s1, int s2, boolean isRecording) {
-    return String.format(DEBUG_TEXT_FORMAT,s1,s2,isRecording);
+  private String getCameraIntrinsicsText(int s1, int s2, boolean isRecording, int numberOfKeyframesSaved) {
+    return String.format(DEBUG_TEXT_FORMAT,s1,s2,isRecording, numberOfKeyframesSaved);
   }
 }

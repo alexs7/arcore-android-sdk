@@ -169,10 +169,10 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     saveKeyFramesButton.setOnClickListener( v -> {
       if(isSaving){
         isSaving = false;
-        saveKeyFramesButton.setText("Save Keyframes");
+        saveKeyFramesButton.setText("Start Saving Keyframes");
         updateStatusTextView(0,0, isSaving, numberOfKeyframesSaved);
       }else {
-        saveKeyFramesButton.setText("Saving Keyframes..");
+        saveKeyFramesButton.setText("Stop Saving Keyframes");
         isSaving = true;
       }
     });
@@ -421,7 +421,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   }
 
   private void saveData(FloatBuffer pointCloudCopy, float[] viewmtx, float[] projmtx, Frame frame, Camera camera) throws NotYetAvailableException {
-    Long tsLong = System.currentTimeMillis() / 1000;
+    Long tsLong = System.currentTimeMillis();
     String timestamp = tsLong.toString();
 
     System.out.println("Saving at:" + timestamp);

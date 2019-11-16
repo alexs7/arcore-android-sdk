@@ -40,6 +40,7 @@ import com.google.ar.core.CameraIntrinsics;
 import com.google.ar.core.Config;
 import com.google.ar.core.Coordinates2d;
 import com.google.ar.core.Frame;
+import com.google.ar.core.ImageMetadata;
 import com.google.ar.core.Plane;
 import com.google.ar.core.PointCloud;
 import com.google.ar.core.Pose;
@@ -129,6 +130,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
                           "Keyframes Saved: %d\n";
   private boolean renderAnchors = true;
   private FancyButton saveKeyFramesButton;
+  private FancyButton save3DPointsButton;
   private int numberOfKeyframesSaved = 0;
 
   // Anchors created from taps used for object placing with a given color.
@@ -165,6 +167,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
     cameraIntrinsicsTextView = findViewById(R.id.camera_intrinsics_view);
     saveKeyFramesButton = findViewById(R.id.btn_saveKeyFrames);
+    save3DPointsButton = findViewById(R.id.btn_save3DPoints);
 
     saveKeyFramesButton.setOnClickListener( v -> {
       if(isSaving){
@@ -434,12 +437,18 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       Image frameImage = null;
       try {
 
+        writeIntrinsicsToFile(camera.getImageIntrinsics(), "imageIntrinsics_" + timestamp);
+        writeIntrinsicsToFile(camera.getTextureIntrinsics(), "textureIntrinsics_" + timestamp);
+
         writeLog(correspondences, cpuImageCorrespondences, timestamp);
         writeCorrespondences(cpuImageCorrespondences, "cpuImageCorrespondences_" + timestamp);
 
         frameImage = frame.acquireCameraImage();
         saveCPUFrameJPEG(frameImage, timestamp);
         numberOfKeyframesSaved ++;
+
+        float focalL = frame.getImageMetadata().getFloat(ImageMetadata.LENS_FOCAL_LENGTH);
+
         frameImage.close();
 
         float[] poseOrientedMatrix = new float[16];
@@ -560,6 +569,9 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     values[6] = 0;
     values[7] = 0;
     values[8] = 1;
+
+    System.out.println("getImageDimensions() W: " + intrinsics.getImageDimensions()[0]);
+    System.out.println("getImageDimensions() H: " + intrinsics.getImageDimensions()[1]);
 
     String matrixString = values[0] + " " + values[1] + " " + values[2] + "\n" +
                           values[3] + " " + values[4] + " " + values[5] + "\n" +

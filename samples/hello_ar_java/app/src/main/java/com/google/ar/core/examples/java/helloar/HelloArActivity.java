@@ -434,6 +434,9 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       Image frameImage = null;
       try {
 
+        writeIntrinsicsToFile(camera.getImageIntrinsics(), "imageIntrinsics_" + timestamp);
+        writeIntrinsicsToFile(camera.getTextureIntrinsics(), "textureIntrinsics_" + timestamp);
+
         writeLog(correspondences, cpuImageCorrespondences, timestamp);
         writeCorrespondences(cpuImageCorrespondences, "cpuImageCorrespondences_" + timestamp);
 

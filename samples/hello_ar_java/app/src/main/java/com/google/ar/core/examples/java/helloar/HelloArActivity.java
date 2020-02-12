@@ -65,6 +65,7 @@ import com.google.ar.core.exceptions.UnavailableUserDeclinedInstallationExceptio
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -117,17 +118,16 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   private static final String IP_ADDRESS = "138.38.173.225";
   private long startTime = 0;
   private static final int TIME_DELAY = 300;
-  private static final int ANCHORS_LIMIT = 150;
+  private static final int ANCHORS_LIMIT = 9;
   private ArrayList<Point3D> points3D = new ArrayList<>();
   private boolean isSaving = false;
   private TextView cameraIntrinsicsTextView;
   private static final float RADIANS_TO_DEGREES = (float) (180 / Math.PI);
   private static final String DEBUG_TEXT_FORMAT =
-                  "Correspondences: %d\n" +
+                          "Correspondences: %d\n" +
                           "CPU Correspondences: %d\n" +
                           "Saving Frames: %s\n" +
                           "Keyframes Saved: %d\n";
-  private boolean renderAnchors = true;
   private FancyButton saveKeyFramesButton;
   private int numberOfKeyframesSaved = 0;
 
@@ -357,6 +357,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       if (camera.getTrackingState() == TrackingState.PAUSED) {
         messageSnackbarHelper.showMessage(
             this, TrackingStateHelper.getTrackingFailureReasonString(camera));
+        writeTrackingState();
         return;
       }
 
@@ -385,22 +386,17 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
         pointCloudRenderer.draw(viewmtx, projmtx);
 
         // Handle one tap per frame.
-//        handleTap(frame, camera, gl, pointCloudCopy);
-
-        //renderAnchors(pointCloudAnchors);
+        handleTap(camera, pointCloudAnchors);
 
         long elapsedTime = nowTime - startTime;
-
         if(elapsedTime > TIME_DELAY && isSaving) {
 
           saveData(pointCloudCopy,viewmtx,projmtx,frame,camera);
-
           startTime = System.currentTimeMillis();
         }
-
       }
 
-      float scaleFactor = 0.00015f;
+      float scaleFactor = 0.0010f;
       for (ColoredAnchor coloredAnchor : anchors) {
         if (coloredAnchor.anchor.getTrackingState() != TrackingState.TRACKING) {
           continue;
@@ -418,6 +414,8 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       // Avoid crashing the application due to unhandled exceptions.
       Log.e(TAG, "Exception on the OpenGL thread", t);
     }
+
+
   }
 
   private void saveData(FloatBuffer pointCloudCopy, float[] viewmtx, float[] projmtx, Frame frame, Camera camera) throws NotYetAvailableException {
@@ -429,8 +427,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     ArrayList<double[]> correspondences = get2D3DCorrespondences(pointCloudCopy, viewmtx, projmtx);
     ArrayList<double[]> cpuImageCorrespondences = getCPUImageCorrespondences(frame, correspondences);
 
-    if(correspondences.size() > 4) {
-
+    if(correspondences.size() > 4 && anchors.isEmpty()) {
       Image frameImage = null;
       try {
 
@@ -442,7 +439,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
         frameImage = frame.acquireCameraImage();
         saveCPUFrameJPEG(frameImage, timestamp);
-        numberOfKeyframesSaved ++;
+        numberOfKeyframesSaved++;
         frameImage.close();
 
         float[] poseOrientedMatrix = new float[16];
@@ -467,14 +464,53 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
         e.printStackTrace();
       }
 
+    }else {
+      Image frameImage = null;
+      try {
+
+        writeIntrinsicsToFile(camera.getImageIntrinsics(), "imageIntrinsics_after_anchors_" + timestamp);
+        writeIntrinsicsToFile(camera.getTextureIntrinsics(), "textureIntrinsics_after_anchors_" + timestamp);
+
+        writeLog(correspondences, cpuImageCorrespondences, timestamp);
+        writeCorrespondences(cpuImageCorrespondences, "cpuImageCorrespondences_after_anchors_" + timestamp);
+
+        frameImage = frame.acquireCameraImage();
+        saveCPUFrameJPEG(frameImage, timestamp);
+        numberOfKeyframesSaved++;
+        frameImage.close();
+
+        float[] poseOrientedMatrix = new float[16];
+        float[] poseMatrix = new float[16];
+        float[] poseSensorMatrix = new float[16];
+
+        Pose cameraPoseOriented = camera.getDisplayOrientedPose();
+        cameraPoseOriented.toMatrix(poseOrientedMatrix,0);
+        writeMatrixToFile(poseOrientedMatrix,"displayOrientedPose_after_anchors_"+timestamp);
+
+        Pose cameraPose = camera.getPose();
+        cameraPose.toMatrix(poseMatrix,0);
+        writeMatrixToFile(poseMatrix,"cameraPose_after_anchors_"+timestamp);
+
+        Pose sensorPose = frame.getAndroidSensorPose();
+        sensorPose.toMatrix(poseSensorMatrix,0);
+        writeMatrixToFile(poseSensorMatrix,"sensorPose_after_anchors_"+timestamp);
+
+        for (ColoredAnchor coloredAnchor : anchors){
+          Pose anchorPose = coloredAnchor.anchor.getPose();
+          writeMatrixToFile(poseSensorMatrix,"anchor_pose_"+timestamp);
+        }
+
+        updateStatusTextView(correspondences.size(), cpuImageCorrespondences.size(), isSaving, numberOfKeyframesSaved);
+
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
     }
   }
 
-  private void renderAnchors(FloatBuffer pointCloud){
+  private void addAnchors(FloatBuffer pointCloud){
 
-    float[] objColor;
-    Point3D previousPoint = new Point3D(0.0f, 0.0f, 0.0f);
-    Point3D currentPoint;
+    float[] objColor = new float[]{0.0f, 0.0f, 255.0f, 255.0f};
 
     while (pointCloud.hasRemaining()) {
 
@@ -483,68 +519,24 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       float z = pointCloud.get();
       float c = pointCloud.get(); //just to get the position moving - not used
 
-      if(c >= 0.62f) {
+      if(c >= 0.72f) {
+        Pose pose = Pose.makeTranslation(x,y,z);
+        Anchor anchor = session.createAnchor(pose);
 
-        currentPoint = new Point3D(x, y, z);
-
-//        System.out.println("Current point: " + currentPoint.getX() + ", " + ", " + currentPoint.getY() + ", " + currentPoint.getZ());
-//        System.out.println("Previous point: " + previousPoint.getX() + ", " + ", " + previousPoint.getY() + ", " + previousPoint.getZ());
-        Log.i("DEBUG-ALEX", "Distance of previous point to current = " + previousPoint.distanceTo(currentPoint));
-
-        previousPoint = currentPoint;
-
-//        points3D.add(point3D);
-//
-//        Pose pose = Pose.makeTranslation(x,y,z);
-//        Anchor anchor = session.createAnchor(pose);
-//
-//        objColor = new float[]{255.0f, 255.0f, 0.0f, 180.0f};
-//
-//        System.out.println("anchors.size() " + anchors.size());
-//        if (anchors.size() < ANCHORS_LIMIT) {
-//          System.out.println("Adding point: " + x + ", " + ", " + y + ", " + z + ", " + c);
-//          anchors.add(new ColoredAnchor(anchor, objColor));
-//        }
+        if(anchors.size() < ANCHORS_LIMIT) {
+          anchors.add(new ColoredAnchor(anchor, objColor));
+        }
       }
     }
-
-//    for (int i = 0; i < points3D.size(); i++) {
-//
-//      float x = points3D.get(i).getX();
-//      float y = points3D.get(i).getY();
-//      float z = points3D.get(i).getZ();
-//
-//      Pose pose = Pose.makeTranslation(x,y,z);
-//
-//      Anchor anchor = session.createAnchor(pose);
-//
-//      float[] objColor = new float[]{66.0f, 133.0f, 244.0f, 255.0f};
-//
-//      if (anchors.size() >= ANCHORS_LIMIT) {
-//        anchors.get(0).anchor.detach();
-//        anchors.remove(0);
-//      }
-//
-//      anchors.add(new ColoredAnchor(anchor, objColor));
-//
-//      System.out.println("anchors.size(): " + anchors.size());
-//    }
 
   }
 
   // Handle only one tap per frame, as taps are usually low frequency compared to frame rate.
-  private void handleTap(Frame frame, Camera camera, GL10 gl, FloatBuffer pointCloud) throws NotYetAvailableException {
+  private void handleTap(Camera camera, FloatBuffer pointCloud) throws NotYetAvailableException {
     MotionEvent tap = tapHelper.poll();
 
     if (tap != null && camera.getTrackingState() == TrackingState.TRACKING) {
-      if(isSaving){
-        isSaving = false;
-
-        updateStatusTextView(0,0, isSaving, numberOfKeyframesSaved);
-
-      }else {
-        isSaving = true;
-      }
+      addAnchors(pointCloud);
     }
   }
 
@@ -681,6 +673,19 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
     return correspondences2D3D;
 
+  }
+
+  private void writeTrackingState() throws IOException {
+    Long tsLong = System.currentTimeMillis();
+    String timestamp = tsLong.toString();
+
+    String string = "Tracking PAUSED";
+    File file = new File(Environment.getExternalStorageDirectory().toString() + "/data_ar/tracking_state_"+timestamp+".txt");
+    FileOutputStream outputStream = new FileOutputStream(file);
+
+    outputStream.write(string.getBytes(Charset.forName("UTF-8")));
+    outputStream.flush();
+    outputStream.close();
   }
 
   private void writeCorrespondences(ArrayList<double[]> correspondences, String filename) throws IOException {

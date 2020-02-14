@@ -71,7 +71,9 @@ import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.nio.charset.Charset;
+import java.sql.Array;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -88,6 +90,7 @@ import okhttp3.OkHttpClient;
  */
 public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.Renderer {
   private static final String TAG = HelloArActivity.class.getSimpleName();
+  private static final String DEV_TAG = "DEBUG-ALEX";
 
   // Rendering. The Renderers are created here, and initialized when the GL surface is created.
   private GLSurfaceView surfaceView;
@@ -117,7 +120,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   private static final String IP_ADDRESS = "138.38.173.225";
   private long startTime = 0;
   private static final int TIME_DELAY = 300;
-  private static final int ANCHORS_LIMIT = 12;
+  private static final int ANCHORS_LIMIT = 10;
   private ArrayList<Point3D> points3D = new ArrayList<>();
   private boolean isSaving = false;
   private TextView cameraIntrinsicsTextView;
@@ -369,28 +372,21 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       final float[] colorCorrectionRgba = new float[4];
       frame.getLightEstimate().getColorCorrection(colorCorrectionRgba, 0);
 
-
-      long elapsedTime = nowTime - startTime;
-      if(elapsedTime > TIME_DELAY && isSaving) {
-        saveData(anchors, viewmtx, projmtx, frame, camera);
-        startTime = System.currentTimeMillis();
-      }
-
-      // Visualize tracked points.
-      // Use try-with-resources to automatically release the point cloud.
-      try (PointCloud pointCloud = frame.acquirePointCloud()) {
-
-        FloatBuffer pointCloudAnchors = pointCloud.getPoints().duplicate();
-
-        pointCloudRenderer.update(pointCloud); // this "uses" up the pointcloud
-        pointCloudRenderer.draw(viewmtx, projmtx);
-
-        // Handle one tap per frame.
-        handleTap(camera, pointCloudAnchors);
-      }
+//      float[] camera_local_loc = camera.getPose().getTranslation();
+//      camera_local_loc = new float[] {camera_local_loc[0], camera_local_loc[1], camera_local_loc[2], 1.f};
+//
+//      float[] camera_local_rot = new float[16];
+//      camera.getPose().extractRotation().inverse().toMatrix(camera_local_rot, 0);
+//
+//      float[] camera_world_loc = new float[4];
+//      Matrix.multiplyMV(camera_world_loc, 0, camera_local_rot, 0, camera_local_loc, 0);
+//      camera_world_loc = new float[] {-1f * camera_world_loc[0], -1f * camera_world_loc[1], -1f * camera_world_loc[2]};
+//
+//      Log.d(DEV_TAG, "The values are: " + Arrays.toString(camera_world_loc));
 
       float scaleFactor = 0.0010f;
-      for (ColoredAnchor coloredAnchor : anchors) {
+      for (int i=0; i < anchors.size(); i++) {
+        ColoredAnchor coloredAnchor = anchors.get(i);
         if (coloredAnchor.anchor.getTrackingState() != TrackingState.TRACKING) {
           continue;
         }
@@ -401,6 +397,40 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
         // Update and draw the model and its shadow.
         virtualObject.updateModelMatrix(anchorMatrix, scaleFactor);
         virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, coloredAnchor.color);
+
+        Pose pose = coloredAnchor.anchor.getPose();
+        float[] anchor_loc = pose.getTranslation();
+        float[] anchor_rot = new float[16];
+
+        anchor_loc = new float[] {anchor_loc[0], anchor_loc[1], anchor_loc[2], 1.f};
+        pose.extractRotation().inverse().toMatrix(anchor_rot, 0);
+
+        float[] anchor_world_loc = new float[4];
+        Matrix.multiplyMV(anchor_world_loc, 0, anchor_rot, 0, anchor_loc, 0);
+        anchor_world_loc = new float[] {-1f * anchor_world_loc[0], -1f * anchor_world_loc[1], -1f * anchor_world_loc[2]};
+
+        Log.d(DEV_TAG, "The anchor's (i = "+i+") location values are: " + Arrays.toString(anchor_world_loc));
+      }
+
+      long elapsedTime = nowTime - startTime;
+      if(elapsedTime > TIME_DELAY && isSaving) {
+        saveData(anchors, viewmtx, projmtx, frame, camera);
+        startTime = System.currentTimeMillis();
+      }
+
+      // Visualize tracked points.
+      // Use try-with-resources to automatically release the point cloud.
+      if(!isSaving) {
+        try (PointCloud pointCloud = frame.acquirePointCloud()) {
+
+          FloatBuffer pointCloudAnchors = pointCloud.getPoints().duplicate();
+
+          pointCloudRenderer.update(pointCloud); // this "uses" up the pointcloud
+          pointCloudRenderer.draw(viewmtx, projmtx);
+
+          // Handle one tap per frame.
+          handleTap(camera, pointCloudAnchors);
+        }
       }
 
     } catch (Throwable t) {
@@ -451,7 +481,11 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
   private void addAnchors(FloatBuffer pointCloud){
 
-    float[] objColor = new float[]{0.0f, 0.0f, 255.0f, 255.0f};
+    float[] objColor = new float[]{0.0f, 0.0f, 0.0f, 255.0f};
+    float[] red = new float[]{255.0f, 0.0f, 0.0f, 255.0f};
+    float[] green = new float[]{0.0f, 255.0f, 0.0f, 255.0f};
+    float[] blue = new float[]{0.0f, 0.0f, 255.0f, 255.0f};
+    float[] white = new float[]{255.0f, 255.0f, 255.0f, 255.0f};
 
     while (pointCloud.hasRemaining()) {
 
@@ -460,7 +494,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       float z = pointCloud.get();
       float c = pointCloud.get(); //just to get the position moving - not used
 
-      if(c >= 0.72f) {
+      if(c >= 0.62f) {
         Pose pose = Pose.makeTranslation(x,y,z);
         Anchor anchor = session.createAnchor(pose);
 
@@ -468,6 +502,23 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
           System.out.println("ADDING ANCHORS");
           anchors.add(new ColoredAnchor(anchor, objColor));
         }
+
+//        //add origin
+//        Pose pose_x = Pose.makeTranslation(0.2f,0,0);
+//        Pose pose_y = Pose.makeTranslation(0,0.2f,0);
+//        Pose pose_z = Pose.makeTranslation(0,0,0.2f);
+//        Pose origin = Pose.makeTranslation(0,0,0);
+//
+//        Anchor anchor_x = session.createAnchor(pose_x);
+//        Anchor anchor_y = session.createAnchor(pose_y);
+//        Anchor anchor_z = session.createAnchor(pose_z);
+//        Anchor anchor_origin = session.createAnchor(origin);
+//
+//        anchors.add(new ColoredAnchor(anchor_x, red));
+//        anchors.add(new ColoredAnchor(anchor_y, green));
+//        anchors.add(new ColoredAnchor(anchor_z, blue));
+//        anchors.add(new ColoredAnchor(anchor_origin, white));
+
       }
     }
   }
@@ -478,9 +529,8 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     MotionEvent tap = tapHelper.poll();
 
     if (tap != null && camera.getTrackingState() == TrackingState.TRACKING) {
-//      if(isSaving) return;
-      isSaving = true;
       addAnchors(pointCloud);
+      if(anchors.size() > 0) isSaving = true;
     }
   }
 

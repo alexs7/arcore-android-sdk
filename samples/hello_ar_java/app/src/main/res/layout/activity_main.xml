@@ -33,29 +33,43 @@
       android:layout_alignParentStart="true"
       android:layout_alignParentTop="true"
       android:padding="20dp"
-      android:textColor="#ffffff"/>
+      android:background="#C60048FF"
+      android:textColor="#69FF00"/>
 
   <TextView
-      android:id="@+id/arDataAnchors"
-      android:layout_width="match_parent"
-      android:layout_height="177dp"
+      android:id="@+id/arDataPanel_1"
+      android:layout_width="203dp"
+      android:layout_height="178dp"
       android:layout_alignParentStart="true"
       android:layout_alignParentTop="true"
       android:layout_marginStart="0dp"
       android:layout_marginTop="473dp"
+      android:background="#C60048FF"
       android:padding="20dp"
-      android:textColor="#4CAF50" />
+      android:textColor="#69FF00" />
+
+  <TextView
+      android:id="@+id/arDataPanel_2"
+      android:layout_width="194dp"
+      android:layout_height="176dp"
+      android:layout_alignParentStart="true"
+      android:layout_alignParentTop="true"
+      android:layout_marginStart="215dp"
+      android:layout_marginTop="474dp"
+      android:background="#C80048FF"
+      android:padding="20dp"
+      android:textColor="#69FF00" />
 
   <mehdi.sakout.fancybuttons.FancyButton
       android:id="@+id/btn_saveKeyFrames"
       android:layout_width="wrap_content"
       android:layout_height="wrap_content"
-      android:layout_marginTop="120dp"
-      android:paddingBottom="10dp"
-      android:paddingLeft="20dp"
-      android:paddingRight="20dp"
-      android:paddingTop="10dp"
       android:layout_alignParentTop="true"
+      android:layout_marginTop="136dp"
+      android:paddingLeft="20dp"
+      android:paddingTop="10dp"
+      android:paddingRight="20dp"
+      android:paddingBottom="10dp"
       fancy:fb_borderColor="#FFFFFF"
       fancy:fb_borderWidth="1dp"
       fancy:fb_defaultColor="#7ab800"
@@ -63,6 +77,25 @@
       fancy:fb_iconPosition="left"
       fancy:fb_radius="30dp"
       fancy:fb_text="Stop Saving Data"
+      fancy:fb_textColor="#FFFFFF" />
+
+  <mehdi.sakout.fancybuttons.FancyButton
+      android:id="@+id/btn_loadPoints"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:layout_alignParentTop="true"
+      android:layout_marginTop="196dp"
+      android:paddingLeft="20dp"
+      android:paddingTop="10dp"
+      android:paddingRight="20dp"
+      android:paddingBottom="10dp"
+      fancy:fb_borderColor="#FFFFFF"
+      fancy:fb_borderWidth="1dp"
+      fancy:fb_defaultColor="#7ab800"
+      fancy:fb_focusColor="#9bd823"
+      fancy:fb_iconPosition="left"
+      fancy:fb_radius="30dp"
+      fancy:fb_text="Draw Axes"
       fancy:fb_textColor="#FFFFFF" />
 
 </RelativeLayout>

@@ -30,6 +30,7 @@ import android.os.Environment;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.MotionEvent;
+import android.view.View;
 import android.widget.TextView;
 import android.widget.Toast;
 import com.google.ar.core.Anchor;
@@ -72,7 +73,6 @@ import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -90,6 +90,14 @@ import okhttp3.OkHttpClient;
 public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.Renderer {
   private static final String TAG = HelloArActivity.class.getSimpleName();
   private static final String DEV_TAG = "DEBUG-ALEX";
+  private static final float ANCHOR_SCALE_FACTOR = 0.0010f;
+
+  private float[] yellow = new float[]{255.0f, 255.0f, 0.0f, 255.0f};
+  private float[] red = new float[]{255.0f, 0.0f, 0.0f, 255.0f};
+  private float[] green = new float[]{0.0f, 255.0f, 0.0f, 255.0f};
+  private float[] blue = new float[]{0.0f, 0.0f, 255.0f, 255.0f};
+  private float[] white = new float[]{255.0f, 255.0f, 255.0f, 255.0f};
+  private float[] purple = new float[]{155.0f, 55.0f, 255.0f, 255.0f};
 
   // Rendering. The Renderers are created here, and initialized when the GL surface is created.
   private GLSurfaceView surfaceView;
@@ -108,6 +116,8 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
   // Temporary matrix allocated here to reduce number of allocations for each frame.
   private final float[] anchorMatrix = new float[16];
+  private final float[] pointMatrix = new float[16];
+
   private static final float[] DEFAULT_COLOR = new float[] {0f, 0f, 0f, 0f};
 
   private static final String SEARCHING_PLANE_MESSAGE = "Searching for surfaces...";
@@ -123,22 +133,30 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   private ArrayList<Point3D> points3D = new ArrayList<>();
   private boolean isSaving = false;
   private TextView cameraIntrinsicsTextView;
-  private TextView arDataAnchorsTextView;
+  private TextView arDataTextView_Left;
+  private TextView arDataTextView_Right;
   private static final float RADIANS_TO_DEGREES = (float) (180 / Math.PI);
   private static final String DEBUG_TEXT_FORMAT =
                           "Correspondences: %d\n" +
                           "CPU Correspondences: %d\n" +
                           "Saving Frames: %s\n" +
                           "Keyframes Saved: %d\n";
-  private static final String ARCORE_DEBUG_TEXT_FORMAT =
-                          "Anchor World Position (mine): (%.3f, %.3f, %.3f)\n" +
-                          "Anchor Local Position: (%.3f, %.3f, %.3f)\n" +
-                          "Camera World Position (mine): (%.3f, %.3f, %.3f)\n" +
-                          "Camera Local Position: (%.3f, %.3f, %.3f)\n" +
-                          "Distance between local values: %.3f\n" +
-                          "Distance between world values: %.3f\n";
+  private static final String AR_DATA_PANEL_LEFT_TEXT =
+                          "ARCore Default Data: \n" +
+                                  "\n"+
+                          "Anchor Local Pos:\n (%.3f, %.3f, %.3f)\n" +
+                          "Camera Local Pos:\n (%.3f, %.3f, %.3f)\n" +
+                          "Distance (m): %.3f\n";
+  private static final String AR_DATA_PANEL_RIGHT_TEXT =
+                          "World Data: \n" +
+                                  "\n"+
+                          "Anchor World Pos:\n (%.3f, %.3f, %.3f)\n" +
+                          "Camera World Pos:\n (%.3f, %.3f, %.3f)\n" +
+                          "Distance (m): %.3f\n";
   private FancyButton saveKeyFramesButton;
+  private FancyButton loadPointsButton;
   private int numberOfKeyframesSaved = 0;
+  private boolean drawPoints = false;
 
   // Anchors created from taps used for object placing with a given color.
   private static class ColoredAnchor {
@@ -173,13 +191,19 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     surfaceView.setWillNotDraw(false);
 
     cameraIntrinsicsTextView = findViewById(R.id.camera_intrinsics_view);
-    arDataAnchorsTextView = findViewById(R.id.arDataAnchors);
+    arDataTextView_Left = findViewById(R.id.arDataPanel_1);
+    arDataTextView_Right = findViewById(R.id.arDataPanel_2);
     saveKeyFramesButton = findViewById(R.id.btn_saveKeyFrames);
+    loadPointsButton = findViewById(R.id.btn_loadPoints);
 
     saveKeyFramesButton.setOnClickListener( v -> {
       if(isSaving) {
         isSaving = false;
       }
+    });
+
+    loadPointsButton.setOnClickListener( v -> {
+      drawPoints = true;
     });
 
     installRequested = false;
@@ -192,6 +216,8 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
     startTime = System.currentTimeMillis();
     deleteFiles("data_ar");
+
+//    external_points = loadPoints();
   }
 
   @Override
@@ -380,7 +406,6 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       final float[] colorCorrectionRgba = new float[4];
       frame.getLightEstimate().getColorCorrection(colorCorrectionRgba, 0);
 
-      float scaleFactor = 0.0010f;
       for (int i=0; i < anchors.size(); i++) {
         ColoredAnchor coloredAnchor = anchors.get(i);
         if (coloredAnchor.anchor.getTrackingState() != TrackingState.TRACKING) {
@@ -391,7 +416,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
         coloredAnchor.anchor.getPose().toMatrix(anchorMatrix, 0);
 
         // Update and draw the model and its shadow.
-        virtualObject.updateModelMatrix(anchorMatrix, scaleFactor);
+        virtualObject.updateModelMatrix(anchorMatrix, ANCHOR_SCALE_FACTOR);
         virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, coloredAnchor.color);
 
         if(i==0) {
@@ -423,9 +448,45 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
           double distance_between_local = Math.sqrt((Math.pow(camera_local_loc[0] - anchor_loc[0], 2) + Math.pow(camera_local_loc[1] - anchor_loc[1], 2) + Math.pow(camera_local_loc[2] - anchor_loc[2], 2)));
           double distance_between_world = Math.sqrt((Math.pow(camera_world_loc[0] - anchor_world_loc[0], 2) + Math.pow(camera_world_loc[1] - anchor_world_loc[1], 2) + Math.pow(camera_world_loc[2] - anchor_world_loc[2], 2)));
-          ;
 
-          updateArDataAnchors(anchor_world_loc, anchor_local_loc, camera_world_loc, camera_local_loc, distance_between_local, distance_between_world);
+
+          updateArDataLeftPanel(anchor_local_loc, camera_local_loc, distance_between_local);
+          updateArDataRightPanel(anchor_world_loc, camera_world_loc, distance_between_world);
+        }
+      }
+
+      if(drawPoints){
+        Pose pose = Pose.makeTranslation(0,0,0);
+        pose.toMatrix(pointMatrix, 0);
+        virtualObject.updateModelMatrix(pointMatrix, ANCHOR_SCALE_FACTOR);
+        virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, white);
+
+        float start = 0.02f;
+        for (int i = 1; i <= 10; i++) {
+          float offset = i/20f;
+          pose = Pose.makeTranslation(start + offset,0,0);
+          pose.toMatrix(pointMatrix, 0);
+          // Update and draw the model and its shadow.
+          virtualObject.updateModelMatrix(pointMatrix, ANCHOR_SCALE_FACTOR);
+          virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, red);
+        }
+
+        for (int i = 1; i <= 10; i++) {
+          float offset = i/20f;
+          pose = Pose.makeTranslation(0, start + offset, 0);
+          pose.toMatrix(pointMatrix, 0);
+          // Update and draw the model and its shadow.
+          virtualObject.updateModelMatrix(pointMatrix, ANCHOR_SCALE_FACTOR);
+          virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, green);
+        }
+
+        for (int i = 1; i <= 10; i++) {
+          float offset = i/20f;
+          pose = Pose.makeTranslation(0,0,start + offset);
+          pose.toMatrix(pointMatrix, 0);
+          // Update and draw the model and its shadow.
+          virtualObject.updateModelMatrix(pointMatrix, ANCHOR_SCALE_FACTOR);
+          virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, blue);
         }
       }
 
@@ -520,20 +581,20 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
         }
 
 //        //add origin
-        Pose pose_x = Pose.makeTranslation(0.2f,0,0);
-        Pose pose_y = Pose.makeTranslation(0,0.2f,0);
-        Pose pose_z = Pose.makeTranslation(0,0,0.2f);
-        Pose origin = Pose.makeTranslation(0,0,0);
-
-        Anchor anchor_x = session.createAnchor(pose_x);
-        Anchor anchor_y = session.createAnchor(pose_y);
-        Anchor anchor_z = session.createAnchor(pose_z);
-        Anchor anchor_origin = session.createAnchor(origin);
-
-        anchors.add(new ColoredAnchor(anchor_x, red));
-        anchors.add(new ColoredAnchor(anchor_y, green));
-        anchors.add(new ColoredAnchor(anchor_z, blue));
-        anchors.add(new ColoredAnchor(anchor_origin, white));
+//        Pose pose_x = Pose.makeTranslation(0.2f,0,0);
+//        Pose pose_y = Pose.makeTranslation(0,0.2f,0);
+//        Pose pose_z = Pose.makeTranslation(0,0,0.2f);
+//        Pose origin = Pose.makeTranslation(0,0,0);
+//
+//        Anchor anchor_x = session.createAnchor(pose_x);
+//        Anchor anchor_y = session.createAnchor(pose_y);
+//        Anchor anchor_z = session.createAnchor(pose_z);
+//        Anchor anchor_origin = session.createAnchor(origin);
+//
+//        anchors.add(new ColoredAnchor(anchor_x, red));
+//        anchors.add(new ColoredAnchor(anchor_y, green));
+//        anchors.add(new ColoredAnchor(anchor_z, blue));
+//        anchors.add(new ColoredAnchor(anchor_origin, white));
 
       }
     }
@@ -550,10 +611,17 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     }
   }
 
-  private void updateArDataAnchors(float[] anchor_world_loc, float[] anchor_local_loc, float[] camera_world_loc, float[] camera_local_loc, double distance_between_local, double distance_between_world) {
-    runOnUiThread(() -> arDataAnchorsTextView.setText(getARCoreDataText(anchor_world_loc, anchor_local_loc,
-                                                                        camera_world_loc, camera_local_loc,
-                                                                        distance_between_local, distance_between_world)));
+  private void updateArDataLeftPanel(float[] anchor_loc, float[] cam_loc, double dist) {
+    String text = String.format(AR_DATA_PANEL_LEFT_TEXT, anchor_loc[0], anchor_loc[1], anchor_loc[2],
+                                                        cam_loc[0], cam_loc[1], cam_loc[2], dist);
+
+   runOnUiThread(() -> arDataTextView_Left.setText(text));
+  }
+
+  private void updateArDataRightPanel(float[] anchor_loc, float[] cam_loc, double dist) {
+    String text = String.format(AR_DATA_PANEL_RIGHT_TEXT, anchor_loc[0], anchor_loc[1], anchor_loc[2],
+                                                          cam_loc[0], cam_loc[1], cam_loc[2], dist);
+    runOnUiThread(() -> arDataTextView_Right.setText(text));
   }
 
   private void updateStatusTextView(int s1, int s2, boolean isRecording, int numberOfKeyframesSaved) {
@@ -899,10 +967,4 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     return String.format(DEBUG_TEXT_FORMAT,s1,s2,isRecording, numberOfKeyframesSaved);
   }
 
-  private String getARCoreDataText(float[] anchor_world_loc, float[] anchor_local_loc, float[] camera_world_loc, float[] camera_local_loc, double distance_between_local, double distance_between_world) {
-    return String.format(ARCORE_DEBUG_TEXT_FORMAT, anchor_world_loc[0], anchor_world_loc[1], anchor_world_loc[2],
-                                                    anchor_local_loc[0], anchor_local_loc[1], anchor_local_loc[2],
-                                                    camera_world_loc[0], camera_world_loc[1], camera_world_loc[2],
-                                                    camera_local_loc[0], camera_local_loc[1], camera_local_loc[2], distance_between_local, distance_between_world);
-  }
 }

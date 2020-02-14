@@ -65,7 +65,6 @@ import com.google.ar.core.exceptions.UnavailableUserDeclinedInstallationExceptio
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -426,6 +425,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
     ArrayList<double[]> correspondences = get2D3DCorrespondences(pointCloudCopy, viewmtx, projmtx);
     ArrayList<double[]> cpuImageCorrespondences = getCPUImageCorrespondences(frame, correspondences);
+    ArrayList<double[]> imageAnchorCorrespondences = getImageAnchorCorrespondences(frame, anchors, viewmtx, projmtx);
 
     if(correspondences.size() > 4 && anchors.isEmpty()) {
       Image frameImage = null;
@@ -473,6 +473,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
         writeLog(correspondences, cpuImageCorrespondences, timestamp);
         writeCorrespondences(cpuImageCorrespondences, "cpuImageCorrespondences_after_anchors_" + timestamp);
+        writeCorrespondences(imageAnchorCorrespondences, "imageAnchorCorrespondences_" + timestamp); //be careful about its position (if / else)
 
         frameImage = frame.acquireCameraImage();
         saveCPUFrameJPEG(frameImage, timestamp);
@@ -497,7 +498,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
         for (ColoredAnchor coloredAnchor : anchors){
           Pose anchorPose = coloredAnchor.anchor.getPose();
-          writeMatrixToFile(poseSensorMatrix,"anchor_pose_"+timestamp);
+//          writeMatrixToFile(poseSensorMatrix,"anchor_pose_"+timestamp); replace this with a i loop and save multiple!
         }
 
         updateStatusTextView(correspondences.size(), cpuImageCorrespondences.size(), isSaving, numberOfKeyframesSaved);
@@ -508,7 +509,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     }
   }
 
-  private void addAnchors(FloatBuffer pointCloud){
+  private void addAnchorsAutomatically(FloatBuffer pointCloud){
 
     float[] objColor = new float[]{0.0f, 0.0f, 255.0f, 255.0f};
 
@@ -528,7 +529,6 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
         }
       }
     }
-
   }
 
   // Handle only one tap per frame, as taps are usually low frequency compared to frame rate.
@@ -536,7 +536,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     MotionEvent tap = tapHelper.poll();
 
     if (tap != null && camera.getTrackingState() == TrackingState.TRACKING) {
-      addAnchors(pointCloud);
+      addAnchorsAutomatically(pointCloud);
     }
   }
 
@@ -577,6 +577,50 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     bos.write(imageData);
     bos.flush();
     bos.close();
+  }
+
+  private ArrayList<double[]> getImageAnchorCorrespondences(Frame frame, ArrayList<ColoredAnchor> anchors, float[] viewmtx, float[] projmtx){
+
+    ArrayList<double[]> imageAnchorCorrespondences = new ArrayList<>();
+    float[] world2screenMatrix = new float[16];
+    float[] ndcPoint = new float[4];
+    float[] point3D = new float[4];
+    float w = 1;
+
+    ArrayList<double[]> correspondences2D3D = new ArrayList<>();
+
+    Matrix.multiplyMM(world2screenMatrix, 0, projmtx, 0, viewmtx, 0);
+
+    for (int i = 0; i < anchors.size(); i++) {
+
+      //these two need to be declared here!
+      double[] screenPoint = new double[]{0,0};
+      double[] correspondence2D3D = new double[]{0,0,0,0,0};
+
+      point3D[0] = anchors.get(i).anchor.getPose().tx();
+      point3D[1] = anchors.get(i).anchor.getPose().ty();
+      point3D[2] = anchors.get(i).anchor.getPose().tz();
+      point3D[3] = w;
+
+      Matrix.multiplyMV(ndcPoint, 0,  world2screenMatrix, 0,  point3D, 0);
+
+      ndcPoint[0] = ndcPoint[0] / ndcPoint[3];
+      ndcPoint[1] = ndcPoint[1] / ndcPoint[3];
+
+      screenPoint[0] = glViewportWidth * ((ndcPoint[0] + 1.0) / 2.0);
+      screenPoint[1] = glViewportHeight * ((1.0 - ndcPoint[1]) / 2.0);
+
+      correspondence2D3D[0] = screenPoint[0];
+      correspondence2D3D[1] = screenPoint[1];
+      correspondence2D3D[2] = point3D[0];
+      correspondence2D3D[3] = point3D[1];
+      correspondence2D3D[4] = point3D[2];
+
+      correspondences2D3D.add(correspondence2D3D);
+    }
+
+    imageAnchorCorrespondences = getCPUImageCorrespondences(frame, correspondences2D3D);
+    return imageAnchorCorrespondences;
   }
 
   private ArrayList<double[]> getCPUImageCorrespondences(Frame frame, ArrayList<double[]> correspondences) {

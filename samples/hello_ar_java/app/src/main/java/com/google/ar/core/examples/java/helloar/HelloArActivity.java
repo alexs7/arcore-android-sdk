@@ -117,7 +117,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   private static final String IP_ADDRESS = "138.38.173.225";
   private long startTime = 0;
   private static final int TIME_DELAY = 300;
-  private static final int ANCHORS_LIMIT = 9;
+  private static final int ANCHORS_LIMIT = 12;
   private ArrayList<Point3D> points3D = new ArrayList<>();
   private boolean isSaving = false;
   private TextView cameraIntrinsicsTextView;
@@ -166,13 +166,8 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     saveKeyFramesButton = findViewById(R.id.btn_saveKeyFrames);
 
     saveKeyFramesButton.setOnClickListener( v -> {
-      if(isSaving){
+      if(isSaving) {
         isSaving = false;
-        saveKeyFramesButton.setText("Start Saving Keyframes");
-        updateStatusTextView(0,0, isSaving, numberOfKeyframesSaved);
-      }else {
-        saveKeyFramesButton.setText("Stop Saving Keyframes");
-        isSaving = true;
       }
     });
 
@@ -374,11 +369,17 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       final float[] colorCorrectionRgba = new float[4];
       frame.getLightEstimate().getColorCorrection(colorCorrectionRgba, 0);
 
+
+      long elapsedTime = nowTime - startTime;
+      if(elapsedTime > TIME_DELAY && isSaving) {
+        saveData(anchors, viewmtx, projmtx, frame, camera);
+        startTime = System.currentTimeMillis();
+      }
+
       // Visualize tracked points.
       // Use try-with-resources to automatically release the point cloud.
       try (PointCloud pointCloud = frame.acquirePointCloud()) {
 
-        FloatBuffer pointCloudCopy = pointCloud.getPoints().duplicate();
         FloatBuffer pointCloudAnchors = pointCloud.getPoints().duplicate();
 
         pointCloudRenderer.update(pointCloud); // this "uses" up the pointcloud
@@ -386,13 +387,6 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
         // Handle one tap per frame.
         handleTap(camera, pointCloudAnchors);
-
-        long elapsedTime = nowTime - startTime;
-        if(elapsedTime > TIME_DELAY && isSaving) {
-
-          saveData(pointCloudCopy,viewmtx,projmtx,frame,camera);
-          startTime = System.currentTimeMillis();
-        }
       }
 
       float scaleFactor = 0.0010f;
@@ -413,103 +407,49 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       // Avoid crashing the application due to unhandled exceptions.
       Log.e(TAG, "Exception on the OpenGL thread", t);
     }
-
-
   }
 
-  private void saveData(FloatBuffer pointCloudCopy, float[] viewmtx, float[] projmtx, Frame frame, Camera camera) throws NotYetAvailableException {
+  private void saveData(ArrayList<ColoredAnchor> anchors, float[] viewmtx, float[] projmtx, Frame frame, Camera camera) throws NotYetAvailableException {
     Long tsLong = System.currentTimeMillis();
     String timestamp = tsLong.toString();
 
     System.out.println("Saving at:" + timestamp);
 
-    ArrayList<double[]> correspondences = get2D3DCorrespondences(pointCloudCopy, viewmtx, projmtx);
-    ArrayList<double[]> cpuImageCorrespondences = getCPUImageCorrespondences(frame, correspondences);
-    ArrayList<double[]> imageAnchorCorrespondences = getImageAnchorCorrespondences(frame, anchors, viewmtx, projmtx);
+    ArrayList<double[]> imageAnchorCorrespondences = getImageAnchorCorrespondences(frame, this.anchors, viewmtx, projmtx);
 
-    if(correspondences.size() > 4 && anchors.isEmpty()) {
-      Image frameImage = null;
-      try {
+    Image frameImage = null;
+    try {
 
-        writeIntrinsicsToFile(camera.getImageIntrinsics(), "imageIntrinsics_" + timestamp);
-        writeIntrinsicsToFile(camera.getTextureIntrinsics(), "textureIntrinsics_" + timestamp);
+      writeIntrinsicsToFile(camera.getImageIntrinsics(), "imageIntrinsics" + timestamp);
 
-        writeLog(correspondences, cpuImageCorrespondences, timestamp);
-        writeCorrespondences(cpuImageCorrespondences, "cpuImageCorrespondences_" + timestamp);
+      writeCorrespondences(imageAnchorCorrespondences, "imageAnchorCorrespondences_" + timestamp); //be careful about its position (if / else)
 
-        frameImage = frame.acquireCameraImage();
-        saveCPUFrameJPEG(frameImage, timestamp);
-        numberOfKeyframesSaved++;
-        frameImage.close();
+      frameImage = frame.acquireCameraImage();
+      saveCPUFrameJPEG(frameImage, timestamp);
+      numberOfKeyframesSaved++;
+      frameImage.close();
 
-        float[] poseOrientedMatrix = new float[16];
-        float[] poseMatrix = new float[16];
-        float[] poseSensorMatrix = new float[16];
+      float[] poseOrientedMatrix = new float[16];
 
-        Pose cameraPoseOriented = camera.getDisplayOrientedPose();
-        cameraPoseOriented.toMatrix(poseOrientedMatrix,0);
-        writeMatrixToFile(poseOrientedMatrix,"displayOrientedPose_"+timestamp);
+      Pose cameraPoseOriented = camera.getDisplayOrientedPose();
+      cameraPoseOriented.toMatrix(poseOrientedMatrix,0);
+      writeMatrixToFile(poseOrientedMatrix,"displayOrientedPose"+timestamp);
 
-        Pose cameraPose = camera.getPose();
-        cameraPose.toMatrix(poseMatrix,0);
-        writeMatrixToFile(poseMatrix,"cameraPose_"+timestamp);
-
-        Pose sensorPose = frame.getAndroidSensorPose();
-        sensorPose.toMatrix(poseSensorMatrix,0);
-        writeMatrixToFile(poseSensorMatrix,"sensorPose_"+timestamp);
-
-        updateStatusTextView(correspondences.size(), cpuImageCorrespondences.size(), isSaving, numberOfKeyframesSaved);
-
-      } catch (IOException e) {
-        e.printStackTrace();
+      for (int i=0; i<anchors.size(); i++){
+        Pose anchorPose = anchors.get(i).anchor.getPose();
+        float[] anchorPoseMatrix = new float[16];
+        anchorPose.toMatrix(anchorPoseMatrix, 0);
+        writeMatrixToFile(anchorPoseMatrix, "anchor_"+i+"_pose_"+timestamp); // replace this with a i loop and save multiple!
       }
 
-    }else {
-      Image frameImage = null;
-      try {
+      updateStatusTextView(0, 0, isSaving, numberOfKeyframesSaved);
 
-        writeIntrinsicsToFile(camera.getImageIntrinsics(), "imageIntrinsics_after_anchors_" + timestamp);
-        writeIntrinsicsToFile(camera.getTextureIntrinsics(), "textureIntrinsics_after_anchors_" + timestamp);
-
-        writeLog(correspondences, cpuImageCorrespondences, timestamp);
-        writeCorrespondences(cpuImageCorrespondences, "cpuImageCorrespondences_after_anchors_" + timestamp);
-        writeCorrespondences(imageAnchorCorrespondences, "imageAnchorCorrespondences_" + timestamp); //be careful about its position (if / else)
-
-        frameImage = frame.acquireCameraImage();
-        saveCPUFrameJPEG(frameImage, timestamp);
-        numberOfKeyframesSaved++;
-        frameImage.close();
-
-        float[] poseOrientedMatrix = new float[16];
-        float[] poseMatrix = new float[16];
-        float[] poseSensorMatrix = new float[16];
-
-        Pose cameraPoseOriented = camera.getDisplayOrientedPose();
-        cameraPoseOriented.toMatrix(poseOrientedMatrix,0);
-        writeMatrixToFile(poseOrientedMatrix,"displayOrientedPose_after_anchors_"+timestamp);
-
-        Pose cameraPose = camera.getPose();
-        cameraPose.toMatrix(poseMatrix,0);
-        writeMatrixToFile(poseMatrix,"cameraPose_after_anchors_"+timestamp);
-
-        Pose sensorPose = frame.getAndroidSensorPose();
-        sensorPose.toMatrix(poseSensorMatrix,0);
-        writeMatrixToFile(poseSensorMatrix,"sensorPose_after_anchors_"+timestamp);
-
-        for (ColoredAnchor coloredAnchor : anchors){
-          Pose anchorPose = coloredAnchor.anchor.getPose();
-//          writeMatrixToFile(poseSensorMatrix,"anchor_pose_"+timestamp); replace this with a i loop and save multiple!
-        }
-
-        updateStatusTextView(correspondences.size(), cpuImageCorrespondences.size(), isSaving, numberOfKeyframesSaved);
-
-      } catch (IOException e) {
-        e.printStackTrace();
-      }
+    } catch (IOException e) {
+      e.printStackTrace();
     }
   }
 
-  private void addAnchorsAutomatically(FloatBuffer pointCloud){
+  private void addAnchors(FloatBuffer pointCloud){
 
     float[] objColor = new float[]{0.0f, 0.0f, 255.0f, 255.0f};
 
@@ -525,6 +465,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
         Anchor anchor = session.createAnchor(pose);
 
         if(anchors.size() < ANCHORS_LIMIT) {
+          System.out.println("ADDING ANCHORS");
           anchors.add(new ColoredAnchor(anchor, objColor));
         }
       }
@@ -533,10 +474,13 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
   // Handle only one tap per frame, as taps are usually low frequency compared to frame rate.
   private void handleTap(Camera camera, FloatBuffer pointCloud) throws NotYetAvailableException {
+
     MotionEvent tap = tapHelper.poll();
 
     if (tap != null && camera.getTrackingState() == TrackingState.TRACKING) {
-      addAnchorsAutomatically(pointCloud);
+//      if(isSaving) return;
+      isSaving = true;
+      addAnchors(pointCloud);
     }
   }
 

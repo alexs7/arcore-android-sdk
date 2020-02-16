@@ -492,7 +492,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
       long elapsedTime = nowTime - startTime;
       if(elapsedTime > TIME_DELAY && isSaving) {
-//        saveData(anchors, viewmtx, projmtx, frame, camera);
+        saveData(anchors, viewmtx, projmtx, frame, camera);
         startTime = System.currentTimeMillis();
       }
 
@@ -559,12 +559,6 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
   private void addAnchors(FloatBuffer pointCloud){
 
-    float[] yellow = new float[]{255.0f, 255.0f, 0.0f, 255.0f};
-    float[] red = new float[]{255.0f, 0.0f, 0.0f, 255.0f};
-    float[] green = new float[]{0.0f, 255.0f, 0.0f, 255.0f};
-    float[] blue = new float[]{0.0f, 0.0f, 255.0f, 255.0f};
-    float[] white = new float[]{255.0f, 255.0f, 255.0f, 255.0f};
-
     while (pointCloud.hasRemaining()) {
 
       float x = pointCloud.get();
@@ -579,22 +573,6 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
         if(anchors.size() < ANCHORS_LIMIT) {
           anchors.add(new ColoredAnchor(anchor, yellow));
         }
-
-//        //add origin
-//        Pose pose_x = Pose.makeTranslation(0.2f,0,0);
-//        Pose pose_y = Pose.makeTranslation(0,0.2f,0);
-//        Pose pose_z = Pose.makeTranslation(0,0,0.2f);
-//        Pose origin = Pose.makeTranslation(0,0,0);
-//
-//        Anchor anchor_x = session.createAnchor(pose_x);
-//        Anchor anchor_y = session.createAnchor(pose_y);
-//        Anchor anchor_z = session.createAnchor(pose_z);
-//        Anchor anchor_origin = session.createAnchor(origin);
-//
-//        anchors.add(new ColoredAnchor(anchor_x, red));
-//        anchors.add(new ColoredAnchor(anchor_y, green));
-//        anchors.add(new ColoredAnchor(anchor_z, blue));
-//        anchors.add(new ColoredAnchor(anchor_origin, white));
 
       }
     }

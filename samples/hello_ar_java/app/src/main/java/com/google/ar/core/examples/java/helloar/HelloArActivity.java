@@ -91,6 +91,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   private static final String TAG = HelloArActivity.class.getSimpleName();
   private static final String DEV_TAG = "DEBUG-ALEX";
   private static final float ANCHOR_SCALE_FACTOR = 0.0010f;
+  private static final int CANDIDATES_SIZE = 5;
 
   private float[] yellow = new float[]{255.0f, 255.0f, 0.0f, 255.0f};
   private float[] red = new float[]{255.0f, 0.0f, 0.0f, 255.0f};
@@ -507,7 +508,8 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
           pointCloudRenderer.draw(viewmtx, projmtx);
 
           // Handle one tap per frame.
-          handleTap(camera, pointCloudAnchors);
+          addAnchors(pointCloudAnchors);
+//          handleTap(camera, pointCloudAnchors);
         }
       }
 
@@ -559,11 +561,9 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
   private void addAnchors(FloatBuffer pointCloud){
 
-    float[] yellow = new float[]{255.0f, 255.0f, 0.0f, 255.0f};
-    float[] red = new float[]{255.0f, 0.0f, 0.0f, 255.0f};
-    float[] green = new float[]{0.0f, 255.0f, 0.0f, 255.0f};
-    float[] blue = new float[]{0.0f, 0.0f, 255.0f, 255.0f};
-    float[] white = new float[]{255.0f, 255.0f, 255.0f, 255.0f};
+    if(!anchors.isEmpty()) return;
+
+    ArrayList<float[]> candidates = new ArrayList<>();
 
     while (pointCloud.hasRemaining()) {
 
@@ -573,12 +573,15 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       float c = pointCloud.get(); //just to get the position moving - not used
 
       if(c >= 0.62f) {
-        Pose pose = Pose.makeTranslation(x,y,z);
-        Anchor anchor = session.createAnchor(pose);
 
-        if(anchors.size() < ANCHORS_LIMIT) {
-          anchors.add(new ColoredAnchor(anchor, yellow));
-        }
+        candidates.add(new float[]{x,y,z});
+
+//        Pose pose = Pose.makeTranslation(x,y,z);
+//        Anchor anchor = session.createAnchor(pose);
+//
+//        if(anchors.size() < ANCHORS_LIMIT) {
+//          anchors.add(new ColoredAnchor(anchor, yellow));
+//        }
 
 //        //add origin
 //        Pose pose_x = Pose.makeTranslation(0.2f,0,0);
@@ -596,6 +599,17 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 //        anchors.add(new ColoredAnchor(anchor_z, blue));
 //        anchors.add(new ColoredAnchor(anchor_origin, white));
 
+      }
+    }
+
+    if(candidates.size() > CANDIDATES_SIZE){
+      for (int i = 0; i < candidates.size(); i++) {
+        float x_cand = candidates.get(i)[0];
+        float y_cand = candidates.get(i)[1];
+        float z_cand = candidates.get(i)[2];
+        Pose pose = Pose.makeTranslation(x_cand, y_cand, z_cand);
+        Anchor anchor = session.createAnchor(pose);
+        anchors.add(new ColoredAnchor(anchor, yellow));
       }
     }
   }

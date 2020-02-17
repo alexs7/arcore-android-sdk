@@ -79,7 +79,14 @@ import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
 
 import mehdi.sakout.fancybuttons.FancyButton;
+import okhttp3.Call;
+import okhttp3.Callback;
+import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
 
 /**
  * This is a simple example that shows how to create an augmented reality (AR) application using the
@@ -125,7 +132,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   private int glViewportHeight = 0;
 
   private OkHttpClient client;
-  private static final String IP_ADDRESS = "138.38.173.225";
+  private static final String IP_ADDRESS = "87.242.196.94";
   private long startTime = 0;
   private static final int TIME_DELAY = 300;
   private static final int ANCHORS_LIMIT = 1;
@@ -154,6 +161,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
                           "Distance (m): %.3f\n";
   private FancyButton saveKeyFramesButton;
   private FancyButton loadPointsButton;
+  private FancyButton sendDataButton;
   private int numberOfKeyframesSaved = 0;
   private int trackingLostTimes = 0;
   private boolean drawAxes = false;
@@ -195,6 +203,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     arDataTextView_Right = findViewById(R.id.arDataPanel_2);
     saveKeyFramesButton = findViewById(R.id.btn_saveKeyFrames);
     loadPointsButton = findViewById(R.id.btn_loadPoints);
+    sendDataButton = findViewById(R.id.btn_sendData);
 
     saveKeyFramesButton.setOnClickListener( v -> {
       if(isSaving) {
@@ -206,6 +215,10 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
     loadPointsButton.setOnClickListener( v -> {
       drawAxes = true;
+    });
+
+    sendDataButton.setOnClickListener( v -> {
+      sendData();
     });
 
     installRequested = false;
@@ -549,6 +562,34 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     } catch (IOException e) {
       e.printStackTrace();
     }
+  }
+
+  private void sendData(){
+    byte[] data = null;
+
+    data = "aman!".getBytes();
+
+    MediaType MEDIA_TYPE_PLAINTEXT = MediaType.parse("text/plain; charset=utf-8");
+
+    Request request = new Request.Builder()
+            .url("http://"+IP_ADDRESS+":3000/")
+            .post(RequestBody.create(data, MEDIA_TYPE_PLAINTEXT))
+            .build();
+
+    client.newCall(request).enqueue(new Callback() {
+      @Override public void onFailure(Call call, IOException e) {
+        e.printStackTrace();
+      }
+
+      @Override public void onResponse(Call call, Response response) throws IOException {
+        try (ResponseBody responseBody = response.body()) {
+
+          if (!response.isSuccessful()) throw new IOException("Unexpected code " + response);
+          System.out.println("HTTP Request Done");
+
+        }
+      }
+    });
   }
 
   private void addAnchors(FloatBuffer pointCloud){

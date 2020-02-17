@@ -61,7 +61,6 @@ import com.google.ar.core.exceptions.UnavailableArcoreNotInstalledException;
 import com.google.ar.core.exceptions.UnavailableDeviceNotCompatibleException;
 import com.google.ar.core.exceptions.UnavailableSdkTooOldException;
 import com.google.ar.core.exceptions.UnavailableUserDeclinedInstallationException;
-
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -73,20 +72,9 @@ import java.nio.IntBuffer;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
-
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
-
 import mehdi.sakout.fancybuttons.FancyButton;
-import okhttp3.Call;
-import okhttp3.Callback;
-import okhttp3.MediaType;
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.RequestBody;
-import okhttp3.Response;
-import okhttp3.ResponseBody;
 
 /**
  * This is a simple example that shows how to create an augmented reality (AR) application using the
@@ -119,6 +107,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   private final BackgroundRenderer backgroundRenderer = new BackgroundRenderer();
   private final ObjectRenderer virtualObject = new ObjectRenderer();
   private final PointCloudRenderer pointCloudRenderer = new PointCloudRenderer();
+  private final ClientWrapper client = new ClientWrapper();
 
   // Temporary matrix allocated here to reduce number of allocations for each frame.
   private final float[] anchorMatrix = new float[16];
@@ -131,10 +120,8 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   private int glViewportWidth = 0;
   private int glViewportHeight = 0;
 
-  private OkHttpClient client;
-  private static final String IP_ADDRESS = "87.242.196.94";
   private long startTime = 0;
-  private static final int TIME_DELAY = 300;
+  private static final int TIME_DELAY = 350;
   private static final int ANCHORS_LIMIT = 1;
   private static final float ANCHOR_CONFIDENCE = 0.7f;
   private ArrayList<Point3D> points3D = new ArrayList<>();
@@ -167,7 +154,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   private boolean drawAxes = false;
 
   // Anchors created from taps used for object placing with a given color.
-  private static class ColoredAnchor {
+  public static class ColoredAnchor {
     public final Anchor anchor;
     public final float[] color;
 
@@ -218,16 +205,10 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     });
 
     sendDataButton.setOnClickListener( v -> {
-      sendData();
+
     });
 
     installRequested = false;
-
-    client = new OkHttpClient.Builder()
-            .connectTimeout(50, TimeUnit.SECONDS)
-            .writeTimeout(50, TimeUnit.SECONDS)
-            .readTimeout(70, TimeUnit.SECONDS)
-            .build();
 
     startTime = System.currentTimeMillis();
     deleteFiles("data_ar");
@@ -504,6 +485,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       long elapsedTime = nowTime - startTime;
       if(elapsedTime > TIME_DELAY && isSaving) {
         saveData(anchors, viewmtx, projmtx, frame, camera);
+        client.sendData(camera, anchors);
         startTime = System.currentTimeMillis();
       }
 
@@ -562,34 +544,6 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     } catch (IOException e) {
       e.printStackTrace();
     }
-  }
-
-  private void sendData(){
-    byte[] data = null;
-
-    data = "aman!".getBytes();
-
-    MediaType MEDIA_TYPE_PLAINTEXT = MediaType.parse("text/plain; charset=utf-8");
-
-    Request request = new Request.Builder()
-            .url("http://"+IP_ADDRESS+":3000/")
-            .post(RequestBody.create(data, MEDIA_TYPE_PLAINTEXT))
-            .build();
-
-    client.newCall(request).enqueue(new Callback() {
-      @Override public void onFailure(Call call, IOException e) {
-        e.printStackTrace();
-      }
-
-      @Override public void onResponse(Call call, Response response) throws IOException {
-        try (ResponseBody responseBody = response.body()) {
-
-          if (!response.isSuccessful()) throw new IOException("Unexpected code " + response);
-          System.out.println("HTTP Request Done");
-
-        }
-      }
-    });
   }
 
   private void addAnchors(FloatBuffer pointCloud){

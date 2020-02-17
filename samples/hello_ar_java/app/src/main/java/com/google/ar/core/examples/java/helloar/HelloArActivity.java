@@ -30,7 +30,6 @@ import android.os.Environment;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.MotionEvent;
-import android.view.View;
 import android.widget.TextView;
 import android.widget.Toast;
 import com.google.ar.core.Anchor;
@@ -130,17 +129,17 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   private long startTime = 0;
   private static final int TIME_DELAY = 300;
   private static final int ANCHORS_LIMIT = 1;
+  private static final float ANCHOR_CONFIDENCE = 0.7f;
   private ArrayList<Point3D> points3D = new ArrayList<>();
   private boolean isSaving = false;
-  private TextView cameraIntrinsicsTextView;
+  private TextView debugTextView;
   private TextView arDataTextView_Left;
   private TextView arDataTextView_Right;
   private static final float RADIANS_TO_DEGREES = (float) (180 / Math.PI);
   private static final String DEBUG_TEXT_FORMAT =
-                          "Correspondences: %d\n" +
-                          "CPU Correspondences: %d\n" +
                           "Saving Frames: %s\n" +
-                          "Keyframes Saved: %d\n";
+                          "Keyframes Saved: %d\n" +
+                          "Times Tracking Lost: %d ";
   private static final String AR_DATA_PANEL_LEFT_TEXT =
                           "ARCore Default Data: \n" +
                                   "\n"+
@@ -156,7 +155,8 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   private FancyButton saveKeyFramesButton;
   private FancyButton loadPointsButton;
   private int numberOfKeyframesSaved = 0;
-  private boolean drawPoints = false;
+  private int trackingLostTimes = 0;
+  private boolean drawAxes = false;
 
   // Anchors created from taps used for object placing with a given color.
   private static class ColoredAnchor {
@@ -190,7 +190,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     surfaceView.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);
     surfaceView.setWillNotDraw(false);
 
-    cameraIntrinsicsTextView = findViewById(R.id.camera_intrinsics_view);
+    debugTextView = findViewById(R.id.debug_text_view);
     arDataTextView_Left = findViewById(R.id.arDataPanel_1);
     arDataTextView_Right = findViewById(R.id.arDataPanel_2);
     saveKeyFramesButton = findViewById(R.id.btn_saveKeyFrames);
@@ -199,11 +199,13 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     saveKeyFramesButton.setOnClickListener( v -> {
       if(isSaving) {
         isSaving = false;
+      }else{
+        isSaving = true;
       }
     });
 
     loadPointsButton.setOnClickListener( v -> {
-      drawPoints = true;
+      drawAxes = true;
     });
 
     installRequested = false;
@@ -290,9 +292,6 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
     surfaceView.onResume();
     displayRotationHelper.onResume();
-
-    //initial start
-    updateStatusTextView(0, 0, isSaving, numberOfKeyframesSaved);
   }
 
   @Override
@@ -388,7 +387,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       if (camera.getTrackingState() == TrackingState.PAUSED) {
         messageSnackbarHelper.showMessage(
             this, TrackingStateHelper.getTrackingFailureReasonString(camera));
-        writeTrackingState();
+        trackingLostTimes++;
         return;
       }
 
@@ -419,7 +418,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
         virtualObject.updateModelMatrix(anchorMatrix, ANCHOR_SCALE_FACTOR);
         virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, coloredAnchor.color);
 
-        if(i==0) {
+        if(i==0) { //this is the first one
           //anchor
           Pose anchor_pose = coloredAnchor.anchor.getPose();
           float[] anchor_local_loc = new float[]{anchor_pose.tx(), anchor_pose.ty(), anchor_pose.tz()};
@@ -449,22 +448,21 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
           double distance_between_local = Math.sqrt((Math.pow(camera_local_loc[0] - anchor_loc[0], 2) + Math.pow(camera_local_loc[1] - anchor_loc[1], 2) + Math.pow(camera_local_loc[2] - anchor_loc[2], 2)));
           double distance_between_world = Math.sqrt((Math.pow(camera_world_loc[0] - anchor_world_loc[0], 2) + Math.pow(camera_world_loc[1] - anchor_world_loc[1], 2) + Math.pow(camera_world_loc[2] - anchor_world_loc[2], 2)));
 
-
           updateArDataLeftPanel(anchor_local_loc, camera_local_loc, distance_between_local);
           updateArDataRightPanel(anchor_world_loc, camera_world_loc, distance_between_world);
         }
       }
 
-      if(drawPoints){
+      if(drawAxes){
         Pose pose = Pose.makeTranslation(0,0,0);
         pose.toMatrix(pointMatrix, 0);
         virtualObject.updateModelMatrix(pointMatrix, ANCHOR_SCALE_FACTOR);
         virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, white);
 
-        float start = 0.02f;
+        float starting_offset = 0.02f;
         for (int i = 1; i <= 10; i++) {
           float offset = i/20f;
-          pose = Pose.makeTranslation(start + offset,0,0);
+          pose = Pose.makeTranslation(starting_offset + offset,0,0);
           pose.toMatrix(pointMatrix, 0);
           // Update and draw the model and its shadow.
           virtualObject.updateModelMatrix(pointMatrix, ANCHOR_SCALE_FACTOR);
@@ -473,7 +471,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
         for (int i = 1; i <= 10; i++) {
           float offset = i/20f;
-          pose = Pose.makeTranslation(0, start + offset, 0);
+          pose = Pose.makeTranslation(0, starting_offset + offset, 0);
           pose.toMatrix(pointMatrix, 0);
           // Update and draw the model and its shadow.
           virtualObject.updateModelMatrix(pointMatrix, ANCHOR_SCALE_FACTOR);
@@ -482,7 +480,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
         for (int i = 1; i <= 10; i++) {
           float offset = i/20f;
-          pose = Pose.makeTranslation(0,0,start + offset);
+          pose = Pose.makeTranslation(0,0,starting_offset + offset);
           pose.toMatrix(pointMatrix, 0);
           // Update and draw the model and its shadow.
           virtualObject.updateModelMatrix(pointMatrix, ANCHOR_SCALE_FACTOR);
@@ -498,18 +496,17 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
       // Visualize tracked points.
       // Use try-with-resources to automatically release the point cloud.
-      if(!isSaving) {
-        try (PointCloud pointCloud = frame.acquirePointCloud()) {
+      try (PointCloud pointCloud = frame.acquirePointCloud()) {
 
-          FloatBuffer pointCloudAnchors = pointCloud.getPoints().duplicate();
+        FloatBuffer pointCloudAnchors = pointCloud.getPoints().duplicate();
 
-          pointCloudRenderer.update(pointCloud); // this "uses" up the pointcloud
-          pointCloudRenderer.draw(viewmtx, projmtx);
+        pointCloudRenderer.update(pointCloud); // this "uses" up the pointcloud
+        pointCloudRenderer.draw(viewmtx, projmtx);
 
-          // Handle one tap per frame.
-          handleTap(camera, pointCloudAnchors);
-        }
+        addAnchors(pointCloudAnchors);
       }
+
+      updateStatusTextView(isSaving, numberOfKeyframesSaved, trackingLostTimes);
 
     } catch (Throwable t) {
       // Avoid crashing the application due to unhandled exceptions.
@@ -529,7 +526,6 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     try {
 
       writeIntrinsicsToFile(camera.getImageIntrinsics(), "imageIntrinsics" + timestamp);
-
       writeCorrespondences(imageAnchorCorrespondences, "imageAnchorCorrespondences_" + timestamp); //be careful about its position (if / else)
 
       frameImage = frame.acquireCameraImage();
@@ -550,14 +546,14 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
         writeMatrixToFile(anchorPoseMatrix, "anchor_"+i+"_pose_"+timestamp); // replace this with a i loop and save multiple!
       }
 
-      updateStatusTextView(0, 0, isSaving, numberOfKeyframesSaved);
-
     } catch (IOException e) {
       e.printStackTrace();
     }
   }
 
   private void addAnchors(FloatBuffer pointCloud){
+
+    if(anchors.size() == ANCHORS_LIMIT) return;
 
     while (pointCloud.hasRemaining()) {
 
@@ -566,7 +562,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       float z = pointCloud.get();
       float c = pointCloud.get(); //just to get the position moving - not used
 
-      if(c >= 0.62f) {
+      if(c >= ANCHOR_CONFIDENCE) {
         Pose pose = Pose.makeTranslation(x,y,z);
         Anchor anchor = session.createAnchor(pose);
 
@@ -592,7 +588,6 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   private void updateArDataLeftPanel(float[] anchor_loc, float[] cam_loc, double dist) {
     String text = String.format(AR_DATA_PANEL_LEFT_TEXT, anchor_loc[0], anchor_loc[1], anchor_loc[2],
                                                         cam_loc[0], cam_loc[1], cam_loc[2], dist);
-
    runOnUiThread(() -> arDataTextView_Left.setText(text));
   }
 
@@ -602,8 +597,9 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     runOnUiThread(() -> arDataTextView_Right.setText(text));
   }
 
-  private void updateStatusTextView(int s1, int s2, boolean isRecording, int numberOfKeyframesSaved) {
-    runOnUiThread(() -> cameraIntrinsicsTextView.setText(getCameraIntrinsicsText(s1,s2,isRecording, numberOfKeyframesSaved)));
+  private void updateStatusTextView(boolean isRecording, int numberOfKeyframesSaved, int trackingLostTimes) {
+    String text = String.format(DEBUG_TEXT_FORMAT, isRecording, numberOfKeyframesSaved, trackingLostTimes);
+    runOnUiThread(() -> debugTextView.setText(text));
   }
 
   private void writeIntrinsicsToFile(CameraIntrinsics intrinsics, String filename) throws IOException {
@@ -781,19 +777,6 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
   }
 
-  private void writeTrackingState() throws IOException {
-    Long tsLong = System.currentTimeMillis();
-    String timestamp = tsLong.toString();
-
-    String string = "Tracking PAUSED";
-    File file = new File(Environment.getExternalStorageDirectory().toString() + "/data_ar/tracking_state_"+timestamp+".txt");
-    FileOutputStream outputStream = new FileOutputStream(file);
-
-    outputStream.write(string.getBytes(Charset.forName("UTF-8")));
-    outputStream.flush();
-    outputStream.close();
-  }
-
   private void writeCorrespondences(ArrayList<double[]> correspondences, String filename) throws IOException {
     String txt = "";
 
@@ -940,9 +923,4 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       }
     }
   }
-
-  private String getCameraIntrinsicsText(int s1, int s2, boolean isRecording, int numberOfKeyframesSaved) {
-    return String.format(DEBUG_TEXT_FORMAT,s1,s2,isRecording, numberOfKeyframesSaved);
-  }
-
 }

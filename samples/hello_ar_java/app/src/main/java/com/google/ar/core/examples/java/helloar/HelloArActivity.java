@@ -557,7 +557,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       float z = pointCloud.get();
       float c = pointCloud.get(); //just to get the position moving - not used
 
-      if(c >= ANCHOR_CONFIDENCE) {
+      if(c >= ANCHOR_CONFIDENCE && z < 2) {
         Pose pose = Pose.makeTranslation(x,y,z);
         Anchor anchor = session.createAnchor(pose);
 

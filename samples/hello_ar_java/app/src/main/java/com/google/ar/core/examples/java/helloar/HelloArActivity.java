@@ -121,7 +121,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   private int glViewportHeight = 0;
 
   private long startTime = 0;
-  private static final int TIME_DELAY = 350;
+  private static final int TIME_DELAY = 300;
   private static final int ANCHORS_LIMIT = 1;
   private static final float ANCHOR_CONFIDENCE = 0.7f;
   private ArrayList<Point3D> points3D = new ArrayList<>();
@@ -532,7 +532,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
       Pose cameraPoseOriented = camera.getDisplayOrientedPose();
       cameraPoseOriented.toMatrix(poseOrientedMatrix,0);
-      writeMatrixToFile(poseOrientedMatrix,"displayOrientedPose"+timestamp);
+      writeMatrixToFile(poseOrientedMatrix,"displayOrientedPose_"+timestamp);
 
       for (int i=0; i<anchors.size(); i++){
         Pose anchorPose = anchors.get(i).anchor.getPose();

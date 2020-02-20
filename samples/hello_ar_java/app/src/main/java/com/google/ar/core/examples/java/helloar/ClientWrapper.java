@@ -1,10 +1,13 @@
 package com.google.ar.core.examples.java.helloar;
 
+import com.google.ar.core.Anchor;
 import com.google.ar.core.Camera;
+import com.google.ar.core.Frame;
 import com.google.ar.core.Pose;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 
 import okhttp3.Call;
@@ -29,12 +32,12 @@ public class ClientWrapper {
                 .build();
     }
 
-    public void sendData(Camera camera, ArrayList<HelloArActivity.ColoredAnchor> anchors){
+    public void sendData(Camera camera, byte[] frame_bytes, Anchor anchor){
 
         String cameraPose = getCameraPoseString(camera.getDisplayOrientedPose());
-        String anchorPosition = getAnchorsPosition(anchors);
+        String anchorPosition = getAnchorsPosition(anchor);
 
-        String data = cameraPose + "," + anchorPosition;
+        String data = cameraPose + "," + anchorPosition + "," + new String(frame_bytes);
 
         MediaType MEDIA_TYPE_PLAINTEXT = MediaType.parse("text/plain; charset=utf-8");
 
@@ -59,10 +62,10 @@ public class ClientWrapper {
         });
     }
 
-    private String getAnchorsPosition(ArrayList<HelloArActivity.ColoredAnchor> anchors) {
-        String anchorPosition =  Float.toString(anchors.get(0).anchor.getPose().tx()) + ","
-                                + Float.toString(anchors.get(0).anchor.getPose().ty()) + ","
-                                + Float.toString(anchors.get(0).anchor.getPose().tz());
+    private String getAnchorsPosition(Anchor anchor) {
+        String anchorPosition =  Float.toString(anchor.getPose().tx()) + ","
+                                + Float.toString(anchor.getPose().ty()) + ","
+                                + Float.toString(anchor.getPose().tz());
         return anchorPosition;
     }
 

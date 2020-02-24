@@ -76,7 +76,7 @@
       fancy:fb_focusColor="#9bd823"
       fancy:fb_iconPosition="left"
       fancy:fb_radius="30dp"
-      fancy:fb_text="Save Data"
+      fancy:fb_text="Save Data (Place Anchor First)"
       fancy:fb_textColor="#FFFFFF" />
 
   <mehdi.sakout.fancybuttons.FancyButton
@@ -133,7 +133,7 @@
       fancy:fb_focusColor="#9bd823"
       fancy:fb_iconPosition="left"
       fancy:fb_radius="30dp"
-      fancy:fb_text="Send Data - NOT WORKING"
+      fancy:fb_text="Send Data (Place Anchor First)"
       fancy:fb_textColor="#FFFFFF" />
 
 </RelativeLayout>

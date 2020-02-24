@@ -71,6 +71,7 @@ import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
@@ -154,10 +155,12 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   private FancyButton saveKeyFramesButton;
   private FancyButton loadPointsButton;
   private FancyButton sendDataButton;
+  private FancyButton localiseButton;
   private int numberOfKeyframesSaved = 0;
   private int trackingLostTimes = 0;
   private boolean drawAxes = false;
   private Anchor mainAnchor = null;
+  private FloatBuffer pointCloudServer = null;
 
   // Anchors created from taps used for object placing with a given color.
   public static class ColoredAnchor {
@@ -203,6 +206,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     saveKeyFramesButton = findViewById(R.id.btn_saveKeyFrames);
     loadPointsButton = findViewById(R.id.btn_loadPoints);
     sendDataButton = findViewById(R.id.btn_sendData);
+    localiseButton = findViewById(R.id.btn_localise);
 
     saveKeyFramesButton.setOnClickListener( v -> {
       isSaving = !isSaving;
@@ -491,22 +495,24 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       }
 
       long elapsedTime = nowTime - startTime;
+
       if(elapsedTime > TIME_DELAY) {
+
         if(isSaving) saveData(anchors, viewmtx, projmtx, frame, camera);
 
         if(isSending) {
           if(anchors.size() > 0) {
             Anchor mainAnchor = anchors.get(0).anchor;
             Image image = frame.acquireCameraImage();
-            byte[] data = NV21toJPEG(YUV_420_888toNV21(image), image.getWidth(), image.getHeight());
-            client.sendData(camera, data, mainAnchor);
+            String frameData = getFrameBase64String(image);
+            client.sendData(camera, frameData, mainAnchor, pointCloudServer);
             image.close();
           }
         }
         startTime = System.currentTimeMillis();
       }
 
-      // draw anchor LOCAL axes
+      // draw anchor LOCAL anchor axes
       if(mainAnchor != null){
         Pose anchoPose = mainAnchor.getPose();
 
@@ -540,6 +546,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       try (PointCloud pointCloud = frame.acquirePointCloud()) {
 
         FloatBuffer pointCloudAnchors = pointCloud.getPoints().duplicate();
+        pointCloudServer = pointCloud.getPoints().duplicate();
 
         pointCloudRenderer.update(pointCloud); // this "uses" up the pointcloud
         pointCloudRenderer.draw(viewmtx, projmtx);
@@ -553,6 +560,13 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       // Avoid crashing the application due to unhandled exceptions.
       Log.e(TAG, "Exception on the OpenGL thread", t);
     }
+  }
+
+  private String getFrameBase64String(Image image) {
+    byte[] imageData = NV21toJPEG(YUV_420_888toNV21(image), image.getWidth(), image.getHeight());
+    byte[] imageDataBase64 = Base64.getEncoder().encode(imageData);
+
+    return new String(imageDataBase64);
   }
 
   private void saveData(ArrayList<ColoredAnchor> anchors, float[] viewmtx, float[] projmtx, Frame frame, Camera camera) throws NotYetAvailableException {
@@ -575,10 +589,15 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       frameImage.close();
 
       float[] poseOrientedMatrix = new float[16];
+      float[] cameraPoseMatrix = new float[16];
 
       Pose cameraPoseOriented = camera.getDisplayOrientedPose();
       cameraPoseOriented.toMatrix(poseOrientedMatrix,0);
       writeMatrixToFile(poseOrientedMatrix,"displayOrientedPose_"+timestamp);
+
+      Pose cameraPose = camera.getPose();
+      cameraPoseOriented.toMatrix(cameraPoseMatrix,0);
+      writeMatrixToFile(cameraPoseMatrix,"cameraPose_"+timestamp);
 
       for (int i=0; i<anchors.size(); i++){
         Pose anchorPose = anchors.get(i).anchor.getPose();

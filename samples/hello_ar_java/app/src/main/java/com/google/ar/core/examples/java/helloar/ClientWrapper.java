@@ -5,7 +5,11 @@ import com.google.ar.core.Camera;
 import com.google.ar.core.Frame;
 import com.google.ar.core.Pose;
 
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import java.io.IOException;
+import java.nio.FloatBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
@@ -32,18 +36,25 @@ public class ClientWrapper {
                 .build();
     }
 
-    public void sendData(Camera camera, byte[] frame_bytes, Anchor anchor){
+    public void sendData(Camera camera, String frameBase64, Anchor anchor, FloatBuffer pointCloudServer) throws JSONException {
 
-        String cameraPose = getCameraPoseString(camera.getDisplayOrientedPose());
+        String cameraPose = getCameraPoseString(camera.getPose());
+        String cameraDisplayOrientedPose = getCameraPoseString(camera.getDisplayOrientedPose());
         String anchorPosition = getAnchorsPosition(anchor);
+        String pointCloud = getPointCloudAsString(pointCloudServer);
 
-        String data = cameraPose + "," + anchorPosition + "," + new String(frame_bytes);
+        JSONObject postData = new JSONObject();
+        postData.put("cameraPose", cameraPose);
+        postData.put("cameraDisplayOrientedPose", cameraDisplayOrientedPose);
+        postData.put("anchorPosition", anchorPosition);
+        postData.put("frameString", frameBase64);
+        postData.put("pointCloud", pointCloud);
 
-        MediaType MEDIA_TYPE_PLAINTEXT = MediaType.parse("text/plain; charset=utf-8");
+        MediaType JSON = MediaType.get("application/json; charset=utf-8");
 
         Request request = new Request.Builder()
                 .url("http://"+IP_ADDRESS+":3000/")
-                .post(RequestBody.create(data, MEDIA_TYPE_PLAINTEXT))
+                .post(RequestBody.create(postData.toString(), JSON))
                 .build();
 
         client.newCall(request).enqueue(new Callback() {
@@ -60,6 +71,32 @@ public class ClientWrapper {
                 }
             }
         });
+    }
+
+    private String getPointCloudAsString(FloatBuffer pointCloudServer) {
+
+        String points3DText = "";
+
+        if(pointCloudServer == null){
+            return "";
+        }
+
+        while (pointCloudServer.hasRemaining()){
+
+            //these two need to be declared here!
+            double[] screenPoint = new double[]{0,0};
+            double[] correspondence2D3D = new double[]{0,0,0,0,0};
+
+            float x = pointCloudServer.get();
+            float y = pointCloudServer.get();
+            float z = pointCloudServer.get();
+            float c = pointCloudServer.get();
+
+            points3DText = points3DText.concat(x + " " + y + " " + z + " " + c + "\n");
+
+        }
+
+        return points3DText;
     }
 
     private String getAnchorsPosition(Anchor anchor) {

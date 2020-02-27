@@ -61,6 +61,9 @@ import com.google.ar.core.exceptions.UnavailableArcoreNotInstalledException;
 import com.google.ar.core.exceptions.UnavailableDeviceNotCompatibleException;
 import com.google.ar.core.exceptions.UnavailableSdkTooOldException;
 import com.google.ar.core.exceptions.UnavailableUserDeclinedInstallationException;
+
+import org.json.JSONException;
+
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -213,11 +216,19 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     });
 
     loadPointsButton.setOnClickListener( v -> {
-      drawAxes = true;
+      drawAxes = !drawAxes;
     });
 
     sendDataButton.setOnClickListener( v -> {
       isSending = !isSending;
+    });
+
+    localiseButton.setOnClickListener( v -> {
+      try {
+        client.sendLocaliseCommand();
+      } catch (JSONException e) {
+        e.printStackTrace();
+      }
     });
 
     installRequested = false;

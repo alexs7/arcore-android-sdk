@@ -73,6 +73,35 @@ public class ClientWrapper {
         });
     }
 
+
+    public void sendLocaliseCommand() throws JSONException {
+
+        JSONObject postData = new JSONObject();
+        postData.put("cameraPose", "localise");
+
+        MediaType JSON = MediaType.get("application/json; charset=utf-8");
+
+        Request request = new Request.Builder()
+                .url("http://"+IP_ADDRESS+":3000/localise")
+                .post(RequestBody.create(postData.toString(), JSON))
+                .build();
+
+        client.newCall(request).enqueue(new Callback() {
+            @Override public void onFailure(Call call, IOException e) {
+                e.printStackTrace();
+            }
+
+            @Override public void onResponse(Call call, Response response) throws IOException {
+                try (ResponseBody responseBody = response.body()) {
+
+                    if (!response.isSuccessful()) throw new IOException("Unexpected code " + response);
+                    System.out.println("HTTP Request Done");
+
+                }
+            }
+        });
+    }
+
     private String getPointCloudAsString(FloatBuffer pointCloudServer) {
 
         String points3DText = "";

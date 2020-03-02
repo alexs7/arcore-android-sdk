@@ -1,5 +1,7 @@
 package com.google.ar.core.examples.java.helloar;
 
+import android.opengl.Matrix;
+
 import com.google.ar.core.Anchor;
 import com.google.ar.core.Camera;
 import com.google.ar.core.Frame;
@@ -39,7 +41,16 @@ public class ClientWrapper {
     public void sendData(Camera camera, String frameBase64, Anchor anchor, FloatBuffer pointCloudServer) throws JSONException {
 
         String cameraPose = getCameraPoseString(camera.getPose());
+        String cameraPoseCamCenter = getCameraCenter(camera.getPose());
+        String cameraPoseLocalAxes = getLocalAxes(camera.getPose());
+
         String cameraDisplayOrientedPose = getCameraPoseString(camera.getDisplayOrientedPose());
+        String cameraDisplayOrientedPoseLocalAxes = getLocalAxes(camera.getDisplayOrientedPose());
+        String cameraDisplayOrientedPoseCamCenter = getCameraCenter(camera.getDisplayOrientedPose());
+
+        String debugAnchorPositionForCameraPose =  getDebugAnchorPosition(new float[]{1.f,0.f,0.f}, camera.getPose());
+        String debugAnchorPositionForDisplayOrientedPose =  getDebugAnchorPosition(new float[]{1.f,0.f,0.f}, camera.getDisplayOrientedPose());
+
         String anchorPosition = getAnchorsPosition(anchor);
         String pointCloud = getPointCloudAsString(pointCloudServer);
 
@@ -49,6 +60,12 @@ public class ClientWrapper {
         postData.put("anchorPosition", anchorPosition);
         postData.put("frameString", frameBase64);
         postData.put("pointCloud", pointCloud);
+        postData.put("cameraPoseLocalAxes", cameraPoseLocalAxes);
+        postData.put("cameraDisplayOrientedPoseLocalAxes", cameraDisplayOrientedPoseLocalAxes);
+        postData.put("cameraPoseCamCenter", cameraPoseCamCenter);
+        postData.put("cameraDisplayOrientedPoseCamCenter", cameraDisplayOrientedPoseCamCenter);
+        postData.put("debugAnchorPositionForCameraPose", debugAnchorPositionForCameraPose);
+        postData.put("debugAnchorPositionForDisplayOrientedPose", debugAnchorPositionForDisplayOrientedPose);
 
         MediaType JSON = MediaType.get("application/json; charset=utf-8");
 
@@ -71,6 +88,62 @@ public class ClientWrapper {
                 }
             }
         });
+    }
+
+    private String getDebugAnchorPosition(float[] localPoint, Pose pose) {
+        float[] worldPoint = pose.inverse().transformPoint(localPoint);
+
+        String x = Float.toString(worldPoint[0]);
+        String y = Float.toString(worldPoint[1]);
+        String z = Float.toString(worldPoint[2]);
+
+        return x+","+y+","+z;
+    }
+
+    private String getCameraCenter(Pose pose) { //verified with matlab - works.
+        float[] camera_loc = pose.getTranslation();
+        camera_loc = new float[]{camera_loc[0], camera_loc[1], camera_loc[2], 1.f};
+
+        float[] camera_rot = new float[16];
+        float[] camera_rot_trans = new float[16];
+        pose.extractRotation().toMatrix(camera_rot, 0);
+
+        Matrix.transposeM(camera_rot_trans, 0, camera_rot, 0);
+
+        float[] camera_world_loc = new float[4];
+        Matrix.multiplyMV(camera_world_loc, 0, camera_rot_trans, 0, camera_loc, 0);
+
+        camera_world_loc = new float[]{-1f * camera_world_loc[0], -1f * camera_world_loc[1], -1f * camera_world_loc[2]};
+
+        String x = Float.toString(camera_world_loc[0]);
+        String y = Float.toString(camera_world_loc[1]);
+        String z = Float.toString(camera_world_loc[2]);
+
+        return x+","+y+","+z;
+    }
+
+    private String getLocalAxes(Pose pose) {
+        float[] x_point = new float[]{0.1f, 0.f, 0.f};
+        float[] y_point = new float[]{0.f, 0.1f, 0.f};
+        float[] z_point = new float[]{0.f, 0.f, 0.1f};
+
+        float[] x_point_world = pose.transformPoint(x_point);
+        float[] y_point_world = pose.transformPoint(y_point);
+        float[] z_point_world = pose.transformPoint(z_point);
+
+        String x0 = Float.toString(x_point_world[0]);
+        String x1 = Float.toString(x_point_world[1]);
+        String x2 = Float.toString(x_point_world[2]);
+
+        String y0 = Float.toString(y_point_world[0]);
+        String y1 = Float.toString(y_point_world[1]);
+        String y2 = Float.toString(y_point_world[2]);
+
+        String z0 = Float.toString(z_point_world[0]);
+        String z1 = Float.toString(z_point_world[1]);
+        String z2 = Float.toString(z_point_world[2]);
+
+        return x0+","+x1+","+x2+","+y0+","+y1+","+y2+","+z0+","+z1+","+z2;
     }
 
 

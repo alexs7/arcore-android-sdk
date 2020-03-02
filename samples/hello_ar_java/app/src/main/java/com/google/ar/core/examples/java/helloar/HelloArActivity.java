@@ -423,7 +423,9 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       frame.getLightEstimate().getColorCorrection(colorCorrectionRgba, 0);
 
       for (int i=0; i < anchors.size(); i++) {
+
         ColoredAnchor coloredAnchor = anchors.get(i);
+
         if (coloredAnchor.anchor.getTrackingState() != TrackingState.TRACKING) {
           continue;
         }

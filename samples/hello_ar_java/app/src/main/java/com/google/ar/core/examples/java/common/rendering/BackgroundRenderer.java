@@ -145,47 +145,47 @@ public class BackgroundRenderer {
    * aspect ratio, which matches the cropping behavior of {@link
    * Frame#transformCoordinates2d(Coordinates2d, float[], Coordinates2d, float[])}.
    */
-  public void draw(
-      int imageWidth, int imageHeight, float screenAspectRatio, int cameraToDisplayRotation) {
-    // Crop the camera image to fit the screen aspect ratio.
-    float imageAspectRatio = (float) imageWidth / imageHeight;
-    float croppedWidth;
-    float croppedHeight;
-    if (screenAspectRatio < imageAspectRatio) {
-      croppedWidth = imageHeight * screenAspectRatio;
-      croppedHeight = imageHeight;
-    } else {
-      croppedWidth = imageWidth;
-      croppedHeight = imageWidth / screenAspectRatio;
-    }
-
-    float u = (imageWidth - croppedWidth) / imageWidth * 0.5f;
-    float v = (imageHeight - croppedHeight) / imageHeight * 0.5f;
-
-    float[] texCoordTransformed;
-    switch (cameraToDisplayRotation) {
-      case 90:
-        texCoordTransformed = new float[] {1 - u, 1 - v, u, 1 - v, 1 - u, v, u, v};
-        break;
-      case 180:
-        texCoordTransformed = new float[] {1 - u, v, 1 - u, 1 - v, u, v, u, 1 - v};
-        break;
-      case 270:
-        texCoordTransformed = new float[] {u, v, 1 - u, v, u, 1 - v, 1 - u, 1 - v};
-        break;
-      case 0:
-        texCoordTransformed = new float[] {u, 1 - v, u, v, 1 - u, 1 - v, 1 - u, v};
-        break;
-      default:
-        throw new IllegalArgumentException("Unhandled rotation: " + cameraToDisplayRotation);
-    }
-
-    // Write image texture coordinates.
-    quadTexCoords.position(0);
-    quadTexCoords.put(texCoordTransformed);
-
-    draw();
-  }
+//  public void draw(
+//      int imageWidth, int imageHeight, float screenAspectRatio, int cameraToDisplayRotation) {
+//    // Crop the camera image to fit the screen aspect ratio.
+//    float imageAspectRatio = (float) imageWidth / imageHeight;
+//    float croppedWidth;
+//    float croppedHeight;
+//    if (screenAspectRatio < imageAspectRatio) {
+//      croppedWidth = imageHeight * screenAspectRatio;
+//      croppedHeight = imageHeight;
+//    } else {
+//      croppedWidth = imageWidth;
+//      croppedHeight = imageWidth / screenAspectRatio;
+//    }
+//
+//    float u = (imageWidth - croppedWidth) / imageWidth * 0.5f;
+//    float v = (imageHeight - croppedHeight) / imageHeight * 0.5f;
+//
+//    float[] texCoordTransformed;
+//    switch (cameraToDisplayRotation) {
+//      case 90:
+//        texCoordTransformed = new float[] {1 - u, 1 - v, u, 1 - v, 1 - u, v, u, v};
+//        break;
+//      case 180:
+//        texCoordTransformed = new float[] {1 - u, v, 1 - u, 1 - v, u, v, u, 1 - v};
+//        break;
+//      case 270:
+//        texCoordTransformed = new float[] {u, v, 1 - u, v, u, 1 - v, 1 - u, 1 - v};
+//        break;
+//      case 0:
+//        texCoordTransformed = new float[] {u, 1 - v, u, v, 1 - u, 1 - v, 1 - u, v};
+//        break;
+//      default:
+//        throw new IllegalArgumentException("Unhandled rotation: " + cameraToDisplayRotation);
+//    }
+//
+//    // Write image texture coordinates.
+//    quadTexCoords.position(0);
+//    quadTexCoords.put(texCoordTransformed);
+//
+//    draw();
+//  }
 
   /**
    * Draws the camera background image using the currently configured {@link

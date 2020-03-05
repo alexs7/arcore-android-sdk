@@ -85,6 +85,7 @@
       android:layout_height="wrap_content"
       android:layout_alignParentTop="true"
       android:layout_marginTop="292dp"
+      android:layout_marginLeft="310dp"
       android:paddingLeft="20dp"
       android:paddingTop="10dp"
       android:paddingRight="20dp"
@@ -99,7 +100,26 @@
       fancy:fb_textColor="#FFFFFF" />
 
   <mehdi.sakout.fancybuttons.FancyButton
-      android:id="@+id/btn_loadPoints"
+      android:id="@+id/btn_reloadElectron"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:layout_alignParentTop="true"
+      android:layout_marginTop="342dp"
+      android:paddingLeft="20dp"
+      android:paddingTop="10dp"
+      android:paddingRight="20dp"
+      android:paddingBottom="10dp"
+      fancy:fb_borderColor="#FFFFFF"
+      fancy:fb_borderWidth="1dp"
+      fancy:fb_defaultColor="#2196F3"
+      fancy:fb_focusColor="#00BCD4"
+      fancy:fb_iconPosition="left"
+      fancy:fb_radius="30dp"
+      fancy:fb_text="Reload Electron"
+      fancy:fb_textColor="#FFFFFF" />
+
+  <mehdi.sakout.fancybuttons.FancyButton
+      android:id="@+id/btn_drawAxes"
       android:layout_width="wrap_content"
       android:layout_height="wrap_content"
       android:layout_alignParentTop="true"

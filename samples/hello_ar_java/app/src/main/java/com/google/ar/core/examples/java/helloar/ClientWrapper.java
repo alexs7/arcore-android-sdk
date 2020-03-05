@@ -38,7 +38,7 @@ public class ClientWrapper {
                 .build();
     }
 
-    public void sendData(Camera camera, String frameBase64, Anchor anchor, FloatBuffer pointCloudServer) throws JSONException {
+    public void sendData(Camera camera, String frameBase64, Anchor anchor, float[] projmtx, float[] viewmtx, FloatBuffer pointCloudServer, FloatBuffer pointCloudVMServer) throws JSONException {
 
         String cameraPose = getCameraPoseString(camera.getPose());
         String cameraPoseCamCenter = getCameraCenter(camera.getPose());
@@ -48,11 +48,23 @@ public class ClientWrapper {
         String cameraDisplayOrientedPoseLocalAxes = getLocalAxes(camera.getDisplayOrientedPose());
         String cameraDisplayOrientedPoseCamCenter = getCameraCenter(camera.getDisplayOrientedPose());
 
+        String viewMatrix = getMatrixString(viewmtx);
+        String projMatrix = getMatrixString(projmtx);
+
+        float[] matrix = new float[16];
+        camera.getPose().toMatrix(matrix,0);
+        String cameraPoseMatrix = getMatrixString(matrix);
+
+        matrix = new float[16];
+        camera.getDisplayOrientedPose().toMatrix(matrix,0);
+        String cameraDisplayOrientedPoseMatrix = getMatrixString(matrix);
+
         String debugAnchorPositionForCameraPose =  getDebugAnchorPosition(new float[]{1.f,0.f,0.f}, camera.getPose());
         String debugAnchorPositionForDisplayOrientedPose =  getDebugAnchorPosition(new float[]{1.f,0.f,0.f}, camera.getDisplayOrientedPose());
 
         String anchorPosition = getAnchorsPosition(anchor);
         String pointCloud = getPointCloudAsString(pointCloudServer);
+        String pointCloudByViewMatrix = getPointCloudByViewMatrixAsString(viewmtx, pointCloudVMServer);
 
         JSONObject postData = new JSONObject();
         postData.put("cameraPose", cameraPose);
@@ -66,6 +78,11 @@ public class ClientWrapper {
         postData.put("cameraDisplayOrientedPoseCamCenter", cameraDisplayOrientedPoseCamCenter);
         postData.put("debugAnchorPositionForCameraPose", debugAnchorPositionForCameraPose);
         postData.put("debugAnchorPositionForDisplayOrientedPose", debugAnchorPositionForDisplayOrientedPose);
+        postData.put("pointCloudByViewMatrix", pointCloudByViewMatrix);
+        postData.put("viewmtx", viewMatrix);
+        postData.put("projMatrix", projMatrix);
+        postData.put("cameraPoseMatrix", cameraPoseMatrix);
+        postData.put("cameraDisplayOrientedPoseMatrix", cameraDisplayOrientedPoseMatrix);
 
         MediaType JSON = MediaType.get("application/json; charset=utf-8");
 
@@ -88,6 +105,35 @@ public class ClientWrapper {
                 }
             }
         });
+    }
+
+    private String getPointCloudByViewMatrixAsString(float[] viewmtx, FloatBuffer pointCloud) {
+        String points3DText = "";
+
+        if(pointCloud == null){
+            return "";
+        }
+
+        while (pointCloud.hasRemaining()){
+
+            float[] res = new float[4];
+            float[] point3D = new float[4];
+
+            float x = pointCloud.get();
+            float y = pointCloud.get();
+            float z = pointCloud.get();
+            float c = pointCloud.get(); //need this to move on!
+
+            point3D[0] = x;
+            point3D[1] = y;
+            point3D[2] = z;
+            point3D[3] = 1.f;
+
+            Matrix.multiplyMV(res, 0, viewmtx, 0, point3D, 0);
+
+            points3DText = points3DText.concat(res[0] + " " + res[1] + " " + res[2] + " " + res[3] + "\n");
+        }
+        return points3DText;
     }
 
     private String getDebugAnchorPosition(float[] localPoint, Pose pose) {
@@ -150,7 +196,7 @@ public class ClientWrapper {
     public void sendLocaliseCommand() throws JSONException {
 
         JSONObject postData = new JSONObject();
-        postData.put("cameraPose", "localise");
+        postData.put("command", "localise");
 
         MediaType JSON = MediaType.get("application/json; charset=utf-8");
 
@@ -185,10 +231,6 @@ public class ClientWrapper {
 
         while (pointCloudServer.hasRemaining()){
 
-            //these two need to be declared here!
-            double[] screenPoint = new double[]{0,0};
-            double[] correspondence2D3D = new double[]{0,0,0,0,0};
-
             float x = pointCloudServer.get();
             float y = pointCloudServer.get();
             float z = pointCloudServer.get();
@@ -218,5 +260,43 @@ public class ClientWrapper {
                             + Float.toString(pose.qw());
 
         return poseString;
+    }
+
+
+    private String getMatrixString(float[] matrix) {
+        String matrixString = matrix[0] + " " + matrix[4] + " " + matrix[8] + " " + matrix[12] + "\n" +
+                matrix[1] + " " + matrix[5] + " " + matrix[9] + " " + matrix[13] + "\n" +
+                matrix[2] + " " + matrix[6] + " " + matrix[10] + " " + matrix[14] + "\n" +
+                matrix[3] + " " + matrix[7] + " " + matrix[11] + " " + matrix[15] + "\n";
+
+        return matrixString;
+    }
+
+    public void sendReloadCommand() throws JSONException {
+
+        JSONObject postData = new JSONObject();
+        postData.put("command", "reload");
+
+        MediaType JSON = MediaType.get("application/json; charset=utf-8");
+
+        Request request = new Request.Builder()
+                .url("http://"+IP_ADDRESS+":3000/reload")
+                .post(RequestBody.create(postData.toString(), JSON))
+                .build();
+
+        client.newCall(request).enqueue(new Callback() {
+            @Override public void onFailure(Call call, IOException e) {
+                e.printStackTrace();
+            }
+
+            @Override public void onResponse(Call call, Response response) throws IOException {
+                try (ResponseBody responseBody = response.body()) {
+
+                    if (!response.isSuccessful()) throw new IOException("Unexpected code " + response);
+                    System.out.println("HTTP Request Done");
+
+                }
+            }
+        });
     }
 }

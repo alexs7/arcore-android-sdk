@@ -156,14 +156,16 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
                   "Camera World Pos:\n (%.3f, %.3f, %.3f)\n" +
                   "Distance (m): %.3f\n";
   private FancyButton saveKeyFramesButton;
-  private FancyButton loadPointsButton;
+  private FancyButton drawAxesButton;
   private FancyButton sendDataButton;
   private FancyButton localiseButton;
+  private FancyButton reloadElectronButton;
   private int numberOfKeyframesSaved = 0;
   private int trackingLostTimes = 0;
   private boolean drawAxes = false;
   private Anchor mainAnchor = null;
   private FloatBuffer pointCloudServer = null;
+  private FloatBuffer pointCloudVMServer = null;
 
   // Anchors created from taps used for object placing with a given color.
   public static class ColoredAnchor {
@@ -207,15 +209,16 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     arDataTextView_Left = findViewById(R.id.arDataPanel_1);
     arDataTextView_Right = findViewById(R.id.arDataPanel_2);
     saveKeyFramesButton = findViewById(R.id.btn_saveKeyFrames);
-    loadPointsButton = findViewById(R.id.btn_loadPoints);
+    drawAxesButton = findViewById(R.id.btn_drawAxes);
     sendDataButton = findViewById(R.id.btn_sendData);
     localiseButton = findViewById(R.id.btn_localise);
+    reloadElectronButton = findViewById(R.id.btn_reloadElectron);
 
     saveKeyFramesButton.setOnClickListener( v -> {
       isSaving = !isSaving;
     });
 
-    loadPointsButton.setOnClickListener( v -> {
+    drawAxesButton.setOnClickListener(v -> {
       drawAxes = !drawAxes;
     });
 
@@ -226,6 +229,14 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     localiseButton.setOnClickListener( v -> {
       try {
         client.sendLocaliseCommand();
+      } catch (JSONException e) {
+        e.printStackTrace();
+      }
+    });
+
+    reloadElectronButton.setOnClickListener( v -> {
+      try {
+        client.sendReloadCommand();
       } catch (JSONException e) {
         e.printStackTrace();
       }
@@ -497,7 +508,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
           virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, green);
         }
 
-        for (int i = 1; i <= 10; i++) {
+        for (int i = -5; i <= 10; i++) {
           float offset = i/20f;
           pose = Pose.makeTranslation(0,0,starting_offset + offset);
           pose.toMatrix(pointMatrix, 0);
@@ -518,7 +529,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
             Anchor mainAnchor = anchors.get(0).anchor;
             Image image = frame.acquireCameraImage();
             String frameData = getFrameBase64String(image);
-            client.sendData(camera, frameData, mainAnchor, pointCloudServer);
+            client.sendData(camera, frameData, mainAnchor, projmtx, viewmtx, pointCloudServer, pointCloudVMServer);
             image.close();
           }
         }
@@ -560,6 +571,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
         FloatBuffer pointCloudAnchors = pointCloud.getPoints().duplicate();
         pointCloudServer = pointCloud.getPoints().duplicate();
+        pointCloudVMServer = pointCloud.getPoints().duplicate();
 
         pointCloudRenderer.update(pointCloud); // this "uses" up the pointcloud
         pointCloudRenderer.draw(viewmtx, projmtx);

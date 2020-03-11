@@ -85,7 +85,7 @@ import mehdi.sakout.fancybuttons.FancyButton;
  * ARCore API. The application will display any detected planes and will allow the user to tap on a
  * plane to place a 3d model of the Android robot.
  */
-public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.Renderer {
+public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.Renderer, CallBackAction {
   private static final String TAG = HelloArActivity.class.getSimpleName();
   private static final String DEV_TAG = "DEBUG-ALEX";
   private static final float ANCHOR_SCALE_FACTOR = 0.0010f;
@@ -115,7 +115,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   private final BackgroundRenderer backgroundRenderer = new BackgroundRenderer();
   private final ObjectRenderer virtualObject = new ObjectRenderer();
   private final PointCloudRenderer pointCloudRenderer = new PointCloudRenderer();
-  private final ClientWrapper client = new ClientWrapper();
+  private ClientWrapper client;
 
   // Temporary matrix allocated here to reduce number of allocations for each frame.
   private final float[] anchorMatrix = new float[16];
@@ -196,6 +196,9 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     // Set up tap listener.
     tapHelper = new TapHelper(/*context=*/ this);
     surfaceView.setOnTouchListener(tapHelper);
+
+    client = new ClientWrapper();
+    client.setCallBackActionListener(this);
 
     // Set up renderer.
     surfaceView.setPreserveEGLContextOnPause(true);
@@ -448,6 +451,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
         virtualObject.updateModelMatrix(anchorMatrix, ANCHOR_SCALE_FACTOR);
         virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, coloredAnchor.color);
 
+        // TODO: get updated anchors here? 
         if(coloredAnchor.getType() == MAIN_ANCHOR) { //this is the first one
           //anchor
           Pose anchor_pose = coloredAnchor.anchor.getPose();
@@ -587,6 +591,11 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     }
   }
 
+  @Override
+  public void updateResultPointCloud(ClientWrapper.ServerResponsePoints serverResponsePoints) {
+    System.out.println("updateResultPointCloud() Called");
+  }
+
   private String getFrameBase64String(Image image) {
     byte[] imageData = NV21toJPEG(YUV_420_888toNV21(image), image.getWidth(), image.getHeight());
     byte[] imageDataBase64 = Base64.getEncoder().encode(imageData);
@@ -621,7 +630,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       writeMatrixToFile(poseOrientedMatrix,"displayOrientedPose_"+timestamp);
 
       Pose cameraPose = camera.getPose();
-      cameraPoseOriented.toMatrix(cameraPoseMatrix,0);
+      cameraPose.toMatrix(cameraPoseMatrix,0);
       writeMatrixToFile(cameraPoseMatrix,"cameraPose_"+timestamp);
 
       for (int i=0; i<anchors.size(); i++){

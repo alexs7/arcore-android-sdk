@@ -6,6 +6,7 @@ import com.google.ar.core.Anchor;
 import com.google.ar.core.Camera;
 import com.google.ar.core.Frame;
 import com.google.ar.core.Pose;
+import com.google.gson.Gson;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -28,7 +29,9 @@ import okhttp3.ResponseBody;
 public class ClientWrapper {
 
     private OkHttpClient client;
+    private CallBackAction callBackAction;
     private static final String IP_ADDRESS = "localhost";
+    private Gson gson;
 
     public ClientWrapper() {
         this.client = new OkHttpClient.Builder()
@@ -36,6 +39,11 @@ public class ClientWrapper {
                 .writeTimeout(50, TimeUnit.SECONDS)
                 .readTimeout(70, TimeUnit.SECONDS)
                 .build();
+        gson = new Gson();
+    }
+
+    public void setCallBackActionListener(CallBackAction callBackAction) {
+        this.callBackAction = callBackAction;
     }
 
     public void sendData(Camera camera, String frameBase64, Anchor anchor, float[] projmtx, float[] viewmtx, FloatBuffer pointCloudServer, FloatBuffer pointCloudVMServer) throws JSONException {
@@ -214,7 +222,10 @@ public class ClientWrapper {
                 try (ResponseBody responseBody = response.body()) {
 
                     if (!response.isSuccessful()) throw new IOException("Unexpected code " + response);
+
                     System.out.println("HTTP Request Done");
+                    ServerResponsePoints serverResponsePoints = gson.fromJson(responseBody.string(), ServerResponsePoints.class);
+                    callBackAction.updateResultPointCloud(serverResponsePoints);
 
                 }
             }
@@ -298,5 +309,9 @@ public class ClientWrapper {
                 }
             }
         });
+    }
+
+    public class ServerResponsePoints {
+        ArrayList<String> points;
     }
 }

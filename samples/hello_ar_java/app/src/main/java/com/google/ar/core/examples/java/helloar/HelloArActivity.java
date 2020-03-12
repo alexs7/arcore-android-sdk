@@ -150,12 +150,6 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
                   "Anchor Local Pos:\n (%.3f, %.3f, %.3f)\n" +
                   "Camera Local Pos:\n (%.3f, %.3f, %.3f)\n" +
                   "Distance (m): %.3f\n";
-  private static final String AR_DATA_PANEL_RIGHT_TEXT =
-          "World Data: \n" +
-                  "\n"+
-                  "Anchor World Pos:\n (%.3f, %.3f, %.3f)\n" +
-                  "Camera World Pos:\n (%.3f, %.3f, %.3f)\n" +
-                  "Distance (m): %.3f\n";
   private FancyButton saveKeyFramesButton;
   private FancyButton drawAxesButton;
   private FancyButton sendDataButton;
@@ -213,7 +207,6 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
     debugTextView = findViewById(R.id.debug_text_view);
     arDataTextView_Left = findViewById(R.id.arDataPanel_1);
-    arDataTextView_Right = findViewById(R.id.arDataPanel_2);
     saveKeyFramesButton = findViewById(R.id.btn_saveKeyFrames);
     drawAxesButton = findViewById(R.id.btn_drawAxes);
     sendDataButton = findViewById(R.id.btn_sendData);
@@ -469,33 +462,15 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
           Pose anchor_pose = coloredAnchor.anchor.getPose();
           float[] anchor_local_loc = new float[]{anchor_pose.tx(), anchor_pose.ty(), anchor_pose.tz()};
           float[] anchor_loc = anchor_pose.getTranslation();
-          float[] anchor_rot = new float[16];
-
           anchor_loc = new float[]{anchor_loc[0], anchor_loc[1], anchor_loc[2], 1.f};
+          float[] anchor_rot = new float[16];
           anchor_pose.extractRotation().inverse().toMatrix(anchor_rot, 0);
 
-          float[] anchor_world_loc = new float[4];
-          Matrix.multiplyMV(anchor_world_loc, 0, anchor_rot, 0, anchor_loc, 0);
-          anchor_world_loc = new float[]{-1f * anchor_world_loc[0], -1f * anchor_world_loc[1], -1f * anchor_world_loc[2]};
-
-          //camera
           Pose camera_pose = camera.getDisplayOrientedPose();
           float[] camera_local_loc = new float[]{camera_pose.tx(), camera_pose.ty(), camera_pose.tz()};
-          float[] camera_loc = camera_pose.getTranslation();
-          float[] camera_rot = new float[16];
-
-          camera_loc = new float[]{camera_loc[0], camera_loc[1], camera_loc[2], 1.f};
-          camera_pose.extractRotation().inverse().toMatrix(camera_rot, 0);
-
-          float[] camera_world_loc = new float[4];
-          Matrix.multiplyMV(camera_world_loc, 0, camera_rot, 0, camera_loc, 0);
-          camera_world_loc = new float[]{-1f * camera_world_loc[0], -1f * camera_world_loc[1], -1f * camera_world_loc[2]};
 
           double distance_between_local = Math.sqrt((Math.pow(camera_local_loc[0] - anchor_loc[0], 2) + Math.pow(camera_local_loc[1] - anchor_loc[1], 2) + Math.pow(camera_local_loc[2] - anchor_loc[2], 2)));
-          double distance_between_world = Math.sqrt((Math.pow(camera_world_loc[0] - anchor_world_loc[0], 2) + Math.pow(camera_world_loc[1] - anchor_world_loc[1], 2) + Math.pow(camera_world_loc[2] - anchor_world_loc[2], 2)));
-
           updateArDataLeftPanel(anchor_local_loc, camera_local_loc, distance_between_local);
-          updateArDataRightPanel(anchor_world_loc, camera_world_loc, distance_between_world);
         }
       }
 
@@ -732,12 +707,6 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     String text = String.format(AR_DATA_PANEL_LEFT_TEXT, anchor_loc[0], anchor_loc[1], anchor_loc[2],
             cam_loc[0], cam_loc[1], cam_loc[2], dist);
     runOnUiThread(() -> arDataTextView_Left.setText(text));
-  }
-
-  private void updateArDataRightPanel(float[] anchor_loc, float[] cam_loc, double dist) {
-    String text = String.format(AR_DATA_PANEL_RIGHT_TEXT, anchor_loc[0], anchor_loc[1], anchor_loc[2],
-            cam_loc[0], cam_loc[1], cam_loc[2], dist);
-    runOnUiThread(() -> arDataTextView_Right.setText(text));
   }
 
   private void updateStatusTextView(boolean isRecording, int numberOfKeyframesSaved, int trackingLostTimes) {

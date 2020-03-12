@@ -48,18 +48,6 @@
       android:padding="20dp"
       android:textColor="#69FF00" />
 
-  <TextView
-      android:id="@+id/arDataPanel_2"
-      android:layout_width="200dp"
-      android:layout_height="170dp"
-      android:layout_alignParentStart="true"
-      android:layout_alignParentTop="true"
-      android:layout_marginStart="215dp"
-      android:layout_marginTop="507dp"
-      android:background="#C80048FF"
-      android:padding="20dp"
-      android:textColor="#69FF00" />
-
   <mehdi.sakout.fancybuttons.FancyButton
       android:id="@+id/btn_saveKeyFrames"
       android:layout_width="wrap_content"

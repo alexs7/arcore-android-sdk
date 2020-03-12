@@ -224,6 +224,36 @@ public class ClientWrapper {
                     if (!response.isSuccessful()) throw new IOException("Unexpected code " + response);
 
                     System.out.println("HTTP Request Done");
+                    ServerPose serverPose = gson.fromJson(responseBody.string(), ServerPose.class);
+                    callBackAction.setServerPose(serverPose);
+
+                }
+            }
+        });
+    }
+
+    public void getModel() throws JSONException {
+
+        JSONObject postData = new JSONObject();
+        postData.put("command", "getModel");
+
+        MediaType JSON = MediaType.get("application/json; charset=utf-8");
+
+        Request request = new Request.Builder()
+                .url("http://"+IP_ADDRESS+":3000/getModel")
+                .post(RequestBody.create(postData.toString(), JSON))
+                .build();
+
+        client.newCall(request).enqueue(new Callback() {
+            @Override public void onFailure(Call call, IOException e) {
+                e.printStackTrace();
+            }
+
+            @Override public void onResponse(Call call, Response response) throws IOException {
+                try (ResponseBody responseBody = response.body()) {
+
+                    if (!response.isSuccessful()) throw new IOException("Unexpected code " + response);
+
                     ServerResponsePoints serverResponsePoints = gson.fromJson(responseBody.string(), ServerResponsePoints.class);
                     callBackAction.updateResultPointCloud(serverResponsePoints);
 
@@ -309,9 +339,5 @@ public class ClientWrapper {
                 }
             }
         });
-    }
-
-    public class ServerResponsePoints {
-        ArrayList<String> points;
     }
 }

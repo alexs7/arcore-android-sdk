@@ -120,6 +120,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   // Temporary matrix allocated here to reduce number of allocations for each frame.
   private final float[] anchorMatrix = new float[16];
   private final float[] pointMatrix = new float[16];
+  private final float[] serverPoseMatrix = new float[16];
 
   private static final float[] DEFAULT_COLOR = new float[] {0f, 0f, 0f, 0f};
   private static final String SEARCHING_PLANE_MESSAGE = "Searching for surfaces...";
@@ -160,12 +161,14 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   private FancyButton sendDataButton;
   private FancyButton localiseButton;
   private FancyButton reloadElectronButton;
+  private FancyButton getModelButton;
   private int numberOfKeyframesSaved = 0;
   private int trackingLostTimes = 0;
   private boolean drawAxes = false;
   private Anchor mainAnchor = null;
   private FloatBuffer pointCloudServer = null;
   private FloatBuffer pointCloudVMServer = null;
+  private boolean haveServerPose = false;
 
   // Anchors created from taps used for object placing with a given color.
   public static class ColoredAnchor {
@@ -216,6 +219,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     sendDataButton = findViewById(R.id.btn_sendData);
     localiseButton = findViewById(R.id.btn_localise);
     reloadElectronButton = findViewById(R.id.btn_reloadElectron);
+    getModelButton = findViewById(R.id.btn_getModel);
 
     saveKeyFramesButton.setOnClickListener( v -> {
       isSaving = !isSaving;
@@ -240,6 +244,14 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     reloadElectronButton.setOnClickListener( v -> {
       try {
         client.sendReloadCommand();
+      } catch (JSONException e) {
+        e.printStackTrace();
+      }
+    });
+
+    getModelButton.setOnClickListener( v -> {
+      try {
+        client.getModel();
       } catch (JSONException e) {
         e.printStackTrace();
       }
@@ -592,8 +604,46 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   }
 
   @Override
-  public void updateResultPointCloud(ClientWrapper.ServerResponsePoints serverResponsePoints) {
-    System.out.println("updateResultPointCloud() Called");
+  public void setServerPose(ServerPose pose){
+    String[] poseString = pose.value.split(", "); //weird splitting!
+    float qw = Float.parseFloat(poseString[0]);
+    float qx = Float.parseFloat(poseString[1]);
+    float qy = Float.parseFloat(poseString[2]);
+    float qz = Float.parseFloat(poseString[3]);
+
+    float tx = Float.parseFloat(poseString[4]);
+    float ty = Float.parseFloat(poseString[5]);
+    float tz = Float.parseFloat(poseString[6]);
+
+    Pose gPose = new Pose(new float[]{tx,ty,tz}, new float[]{qx,qy,qz,qw});
+    gPose.toMatrix(serverPoseMatrix, 0);
+
+    haveServerPose = true;
+  }
+
+  @Override
+  public void updateResultPointCloud(ServerResponsePoints serverResponsePoints) {
+    ArrayList<String> points = serverResponsePoints.points;
+    int capacity = serverResponsePoints.points.size() * 4;
+    FloatBuffer fb = FloatBuffer.allocate(capacity);
+
+    for(int i = 0; i < points.size(); i++){
+      if(!points.get(i).isEmpty()) {
+        String[] point = points.get(i).split(" ");
+        float x = Float.parseFloat(point[0]);
+        float y = Float.parseFloat(point[1]);
+        float z = Float.parseFloat(point[2]);
+        float h = Float.parseFloat(point[3]);
+
+        fb.put(x);
+        fb.put(y);
+        fb.put(z);
+        fb.put(h);
+      }
+    }
+
+    fb.rewind();
+    System.out.println("Model in Memory!");
   }
 
   private String getFrameBase64String(Image image) {

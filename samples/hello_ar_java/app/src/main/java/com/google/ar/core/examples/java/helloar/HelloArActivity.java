@@ -54,6 +54,7 @@ import com.google.ar.core.examples.java.common.helpers.TrackingStateHelper;
 import com.google.ar.core.examples.java.common.rendering.BackgroundRenderer;
 import com.google.ar.core.examples.java.common.rendering.ObjectRenderer;
 import com.google.ar.core.examples.java.common.rendering.PointCloudRenderer;
+import com.google.ar.core.examples.java.common.rendering.ServerModelCloudRenderer;
 import com.google.ar.core.exceptions.CameraNotAvailableException;
 import com.google.ar.core.exceptions.NotYetAvailableException;
 import com.google.ar.core.exceptions.UnavailableApkTooOldException;
@@ -74,6 +75,7 @@ import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
 import javax.microedition.khronos.egl.EGLConfig;
@@ -115,12 +117,14 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   private final BackgroundRenderer backgroundRenderer = new BackgroundRenderer();
   private final ObjectRenderer virtualObject = new ObjectRenderer();
   private final PointCloudRenderer pointCloudRenderer = new PointCloudRenderer();
+  private final ServerModelCloudRenderer serverModelCloudRenderer = new ServerModelCloudRenderer();
   private ClientWrapper client;
 
   // Temporary matrix allocated here to reduce number of allocations for each frame.
   private final float[] anchorMatrix = new float[16];
   private final float[] pointMatrix = new float[16];
   private final float[] serverPoseMatrix = new float[16];
+  private final float[] mobilePoseMatrix = new float[16];
 
   private static final float[] DEFAULT_COLOR = new float[] {0f, 0f, 0f, 0f};
   private static final String SEARCHING_PLANE_MESSAGE = "Searching for surfaces...";
@@ -162,7 +166,10 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   private Anchor mainAnchor = null;
   private FloatBuffer pointCloudServer = null;
   private FloatBuffer pointCloudVMServer = null;
-  private boolean haveServerPose = false;
+  private boolean haveServerPoses = false;
+  private FloatBuffer modelServer = null;
+  private boolean modelServerLoaded = false;
+  private ArrayList<String> serverPoints = null;
 
   // Anchors created from taps used for object placing with a given color.
   public static class ColoredAnchor {
@@ -286,7 +293,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
         List<CameraConfig> cameraConfigs = session.getSupportedCameraConfigs();
         Config config = new Config(session);
-        config.setFocusMode(Config.FocusMode.AUTO);
+        config.setFocusMode(Config.FocusMode.FIXED);
         session.configure(config);
 
       } catch (UnavailableArcoreNotInstalledException
@@ -373,6 +380,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       pointCloudRenderer.createOnGlThread(/*context=*/ this);
       virtualObject.createOnGlThread(/*context=*/ this, "models/andy.obj", "models/andy.png");
       virtualObject.setMaterialProperties(0.0f, 2.0f, 0.5f, 6.0f);
+      serverModelCloudRenderer.createOnGlThread(/*context=*/this);
 
     } catch (IOException e) {
       Log.e(TAG, "Failed to read an asset file", e);
@@ -433,7 +441,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
       // Get camera matrix and draw.
       float[] viewmtx = new float[16];
-      camera.getViewMatrix(viewmtx, 0);
+      camera.getViewMatrix(viewmtx, 0); // uses the DisplayOrientedPose
 
       // Compute lighting from average intensity of the image.
       // The first three components are color scaling factors.
@@ -475,42 +483,58 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       }
 
       if(drawAxes){
-        Pose pose = Pose.makeTranslation(0,0,0);
-        pose.toMatrix(pointMatrix, 0);
-        virtualObject.updateModelMatrix(pointMatrix, ANCHOR_SCALE_FACTOR);
-        virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, white);
 
-        float starting_offset = 0.02f;
-        for (int i = 1; i <= 10; i++) {
-          float offset = i/20f;
-          pose = Pose.makeTranslation(starting_offset + offset,0,0);
-          pose.toMatrix(pointMatrix, 0);
-          // Update and draw the model and its shadow.
-          virtualObject.updateModelMatrix(pointMatrix, ANCHOR_SCALE_FACTOR);
-          virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, red);
+        for(int i = 0; i < serverPoints.size(); i++){
+          if(!serverPoints.get(i).isEmpty()) {
+            String[] point = serverPoints.get(i).split(" ");
+
+            float x = Float.parseFloat(point[0]);
+            float y = Float.parseFloat(point[1]);
+            float z = Float.parseFloat(point[2]);
+            float h = Float.parseFloat(point[3]);
+
+            Pose pose = Pose.makeTranslation(x,y,z);
+            pose.toMatrix(pointMatrix, 0);
+            virtualObject.updateModelMatrix(pointMatrix, ANCHOR_SCALE_FACTOR);
+            virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, white);
+          }
         }
 
-        for (int i = 1; i <= 10; i++) {
-          float offset = i/20f;
-          pose = Pose.makeTranslation(0, starting_offset + offset, 0);
-          pose.toMatrix(pointMatrix, 0);
-          // Update and draw the model and its shadow.
-          virtualObject.updateModelMatrix(pointMatrix, ANCHOR_SCALE_FACTOR);
-          virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, green);
-        }
-
-        for (int i = -5; i <= 10; i++) {
-          float offset = i/20f;
-          pose = Pose.makeTranslation(0,0,starting_offset + offset);
-          pose.toMatrix(pointMatrix, 0);
-          // Update and draw the model and its shadow.
-          virtualObject.updateModelMatrix(pointMatrix, ANCHOR_SCALE_FACTOR);
-          virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, blue);
-        }
+//        Pose pose = Pose.makeTranslation(0,0,0);
+//        pose.toMatrix(pointMatrix, 0);
+//        virtualObject.updateModelMatrix(pointMatrix, ANCHOR_SCALE_FACTOR);
+//        virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, white);
+//
+//        float starting_offset = 0.02f;
+//        for (int i = 1; i <= 10; i++) {
+//          float offset = i/20f;
+//          pose = Pose.makeTranslation(starting_offset + offset,0,0);
+//          pose.toMatrix(pointMatrix, 0);
+//          // Update and draw the model and its shadow.
+//          virtualObject.updateModelMatrix(pointMatrix, ANCHOR_SCALE_FACTOR);
+//          virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, red);
+//        }
+//
+//        for (int i = 1; i <= 10; i++) {
+//          float offset = i/20f;
+//          pose = Pose.makeTranslation(0, starting_offset + offset, 0);
+//          pose.toMatrix(pointMatrix, 0);
+//          // Update and draw the model and its shadow.
+//          virtualObject.updateModelMatrix(pointMatrix, ANCHOR_SCALE_FACTOR);
+//          virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, green);
+//        }
+//
+//        for (int i = -5; i <= 10; i++) {
+//          float offset = i/20f;
+//          pose = Pose.makeTranslation(0,0,starting_offset + offset);
+//          pose.toMatrix(pointMatrix, 0);
+//          // Update and draw the model and its shadow.
+//          virtualObject.updateModelMatrix(pointMatrix, ANCHOR_SCALE_FACTOR);
+//          virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, blue);
+//        }
       }
 
       long elapsedTime = nowTime - startTime;
-
       if(elapsedTime > TIME_DELAY) {
 
         if(isSaving) saveData(anchors, viewmtx, projmtx, frame, camera);
@@ -564,10 +588,16 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
         pointCloudServer = pointCloud.getPoints().duplicate();
         pointCloudVMServer = pointCloud.getPoints().duplicate();
 
-        pointCloudRenderer.update(pointCloud); // this "uses" up the pointcloud
-        pointCloudRenderer.draw(viewmtx, projmtx);
-
         addAnchors(pointCloudAnchors);
+
+        if(haveServerPoses && modelServerLoaded){
+          System.out.println("Drawing duplicate points cloud");
+          pointCloudRenderer.updateFB(modelServer);
+          pointCloudRenderer.draw(viewmtx, projmtx);
+        }else{
+          pointCloudRenderer.update(pointCloud); // this "uses" up the pointcloud
+          pointCloudRenderer.draw(viewmtx, projmtx);
+        }
       }
 
       updateStatusTextView(isSaving, numberOfKeyframesSaved, trackingLostTimes);
@@ -580,45 +610,78 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
   @Override
   public void setServerPose(ServerPose pose){
-    String[] poseString = pose.value.split(", "); //weird splitting!
-    float qw = Float.parseFloat(poseString[0]);
-    float qx = Float.parseFloat(poseString[1]);
-    float qy = Float.parseFloat(poseString[2]);
-    float qz = Float.parseFloat(poseString[3]);
+    ArrayList<String> serverPoseValues = pose.getServer_pose();
+    ArrayList<String> mobilePoseValues = pose.getArcore_pose();
 
-    float tx = Float.parseFloat(poseString[4]);
-    float ty = Float.parseFloat(poseString[5]);
-    float tz = Float.parseFloat(poseString[6]);
+    getARCorePoseFromServerResponseMatrix(serverPoseValues).toMatrix(serverPoseMatrix, 0);
+    getARCorePoseFromServerResponseMatrix(mobilePoseValues).toMatrix(mobilePoseMatrix, 0);
 
-    Pose gPose = new Pose(new float[]{tx,ty,tz}, new float[]{qx,qy,qz,qw});
-    gPose.toMatrix(serverPoseMatrix, 0);
-
-    haveServerPose = true;
+    haveServerPoses = true;
   }
+
+  private Pose getARCorePoseFromServerResponseMatrix(ArrayList<String> poseValues) {
+
+    float qx = Float.parseFloat(poseValues.get(3));
+    float qy = Float.parseFloat(poseValues.get(4));
+    float qz = Float.parseFloat(poseValues.get(5));
+    float qw = Float.parseFloat(poseValues.get(6));
+
+    float tx = Float.parseFloat(poseValues.get(0));
+    float ty = Float.parseFloat(poseValues.get(1));
+    float tz = Float.parseFloat(poseValues.get(2));
+
+    return new Pose(new float[]{tx,ty,tz}, new float[]{qx,qy,qz,qw});
+  }
+
 
   @Override
   public void updateResultPointCloud(ServerResponsePoints serverResponsePoints) {
-    ArrayList<String> points = serverResponsePoints.points;
-    int capacity = serverResponsePoints.points.size() * 4;
-    FloatBuffer fb = FloatBuffer.allocate(capacity);
+    serverPoints = serverResponsePoints.points;
+    int capacity = 0;
 
-    for(int i = 0; i < points.size(); i++){
-      if(!points.get(i).isEmpty()) {
-        String[] point = points.get(i).split(" ");
-        float x = Float.parseFloat(point[0]);
-        float y = Float.parseFloat(point[1]);
-        float z = Float.parseFloat(point[2]);
-        float h = Float.parseFloat(point[3]);
-
-        fb.put(x);
-        fb.put(y);
-        fb.put(z);
-        fb.put(h);
+    for(int i = 0; i < serverPoints.size(); i++){
+      if(!serverPoints.get(i).isEmpty()) {
+        capacity++;
       }
     }
 
-    fb.rewind();
+    modelServer = FloatBuffer.allocate(capacity * 4);
+
+    for(int i = 0; i < serverPoints.size(); i++){
+      if(!serverPoints.get(i).isEmpty()) {
+        String[] point = serverPoints.get(i).split(" ");
+
+        float x = Float.parseFloat(point[0]);
+        float y = Float.parseFloat(point[1]);
+        float z = Float.parseFloat(point[2]);
+        float h = 1.f;
+
+        System.out.println("Adding Point x " + x);
+        System.out.println("Adding Point y " + y);
+        System.out.println("Adding Point z " + z);
+        System.out.println("Adding Point h " + h);
+
+        modelServer.put(x);
+        modelServer.put(y);
+        modelServer.put(z);
+        modelServer.put(h);
+      }
+    }
+
+    modelServer.rewind();
+
+    System.out.println("Original FloatBuffer:  "
+            + Arrays.toString(modelServer.array()));
+
+    System.out.println("Original FloatBuffer Size:  "
+            + modelServer.array().length);
+
     System.out.println("Model in Memory!");
+    serverModelCloudRenderer.update(modelServer);
+    System.out.println("serverModelCloudRenderer updated!");
+
+    modelServerLoaded = true;
+
   }
 
   private String getFrameBase64String(Image image) {

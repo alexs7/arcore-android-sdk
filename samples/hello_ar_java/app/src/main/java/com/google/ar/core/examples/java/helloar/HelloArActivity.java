@@ -549,6 +549,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
           }
         }
         startTime = System.currentTimeMillis();
+
       }
 
       // draw anchor LOCAL anchor axes
@@ -585,10 +586,12 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       try (PointCloud pointCloud = frame.acquirePointCloud()) {
 
         FloatBuffer pointCloudAnchors = pointCloud.getPoints().duplicate();
+//        FloatBuffer pointCloudLocal = pointCloud.getPoints().duplicate();
         pointCloudServer = pointCloud.getPoints().duplicate();
         pointCloudVMServer = pointCloud.getPoints().duplicate();
 
         addAnchors(pointCloudAnchors);
+//        write3DPoints(pointCloudLocal);
 
         if(haveServerPoses && modelServerLoaded){
           System.out.println("Drawing duplicate points cloud");
@@ -606,6 +609,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       // Avoid crashing the application due to unhandled exceptions.
       Log.e(TAG, "Exception on the OpenGL thread", t);
     }
+
   }
 
   @Override
@@ -702,7 +706,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     Image frameImage = null;
     try {
 
-      writeIntrinsicsToFile(camera.getImageIntrinsics(), "imageIntrinsics" + timestamp);
+      writeIntrinsicsToFile(camera.getImageIntrinsics(), "imageIntrinsics_" + timestamp);
       writeCorrespondences(imageAnchorCorrespondences, "imageAnchorCorrespondences_" + timestamp); //be careful about its position (if / else)
 
       frameImage = frame.acquireCameraImage();
@@ -1024,7 +1028,13 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     String txt = "";
 
     while (points.hasRemaining()){
-      txt = txt.concat(Float.toString(points.get()) + " ");
+
+      String x = Float.toString(points.get());
+      String y = Float.toString(points.get());
+      String z = Float.toString(points.get());
+      String c = Float.toString(points.get()); //just to get the position moving - not used
+
+      txt = txt.concat(x + " " + y + " " + z + "\n");
     }
 
     File matrixFile = new File(Environment.getExternalStorageDirectory().toString() + "/data_ar/points3Dworld.txt");

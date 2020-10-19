@@ -30,6 +30,7 @@ import android.os.Environment;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.MotionEvent;
+import android.view.View;
 import android.widget.TextView;
 import android.widget.Toast;
 import com.google.ar.core.Anchor;
@@ -141,7 +142,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   private boolean isSaving = false;
   private boolean isSending = false;
   private TextView debugTextView;
-  private TextView arDataTextView_Left;
+  private TextView arDataTextView;
   private TextView arDataTextView_Right;
   private static final float RADIANS_TO_DEGREES = (float) (180 / Math.PI);
   private static final String DEBUG_TEXT_FORMAT =
@@ -160,6 +161,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   private FancyButton localiseButton;
   private FancyButton reloadElectronButton;
   private FancyButton getModelButton;
+  private FancyButton hideAllButton;
   private int numberOfKeyframesSaved = 0;
   private int trackingLostTimes = 0;
   private boolean drawAxes = false;
@@ -213,13 +215,30 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     surfaceView.setWillNotDraw(false);
 
     debugTextView = findViewById(R.id.debug_text_view);
-    arDataTextView_Left = findViewById(R.id.arDataPanel_1);
+    arDataTextView = findViewById(R.id.arDataPanel_1);
     saveKeyFramesButton = findViewById(R.id.btn_saveKeyFrames);
     drawAxesButton = findViewById(R.id.btn_drawAxes);
     sendDataButton = findViewById(R.id.btn_sendData);
     localiseButton = findViewById(R.id.btn_localise);
     reloadElectronButton = findViewById(R.id.btn_reloadElectron);
     getModelButton = findViewById(R.id.btn_getModel);
+    hideAllButton = findViewById(R.id.hideAllButton);
+
+    hideAllButton.setOnClickListener( v -> {
+      int visibility = debugTextView.getVisibility(); // check for one is enough
+      if(visibility == View.INVISIBLE){
+        visibility = View.VISIBLE;
+      }else{
+        visibility = View.INVISIBLE;
+      }
+      debugTextView.setVisibility(visibility);
+      arDataTextView.setVisibility(visibility);
+      drawAxesButton.setVisibility(visibility);
+      sendDataButton.setVisibility(visibility);
+      localiseButton.setVisibility(visibility);
+      reloadElectronButton.setVisibility(visibility);
+      getModelButton.setVisibility(visibility);
+    });
 
     saveKeyFramesButton.setOnClickListener( v -> {
       isSaving = !isSaving;
@@ -719,17 +738,17 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
       Pose cameraPoseOriented = camera.getDisplayOrientedPose();
       cameraPoseOriented.toMatrix(poseOrientedMatrix,0);
-      writeMatrixToFile(poseOrientedMatrix,"displayOrientedPose_"+timestamp);
+//      writeMatrixToFile(poseOrientedMatrix,"displayOrientedPose_"+timestamp);
 
       Pose cameraPose = camera.getPose();
       cameraPose.toMatrix(cameraPoseMatrix,0);
-      writeMatrixToFile(cameraPoseMatrix,"cameraPose_"+timestamp);
+//      writeMatrixToFile(cameraPoseMatrix,"cameraPose_"+timestamp);
 
       for (int i=0; i<anchors.size(); i++){
         Pose anchorPose = anchors.get(i).anchor.getPose();
         float[] anchorPoseMatrix = new float[16];
         anchorPose.toMatrix(anchorPoseMatrix, 0);
-        writeMatrixToFile(anchorPoseMatrix, "anchor_"+i+"_pose_"+timestamp); // replace this with a i loop and save multiple!
+//        writeMatrixToFile(anchorPoseMatrix, "anchor_"+i+"_pose_"+timestamp); // replace this with a i loop and save multiple!
       }
 
     } catch (IOException e) {
@@ -773,7 +792,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   private void updateArDataLeftPanel(float[] anchor_loc, float[] cam_loc, double dist) {
     String text = String.format(AR_DATA_PANEL_LEFT_TEXT, anchor_loc[0], anchor_loc[1], anchor_loc[2],
             cam_loc[0], cam_loc[1], cam_loc[2], dist);
-    runOnUiThread(() -> arDataTextView_Left.setText(text));
+    runOnUiThread(() -> arDataTextView.setText(text));
   }
 
   private void updateStatusTextView(boolean isRecording, int numberOfKeyframesSaved, int trackingLostTimes) {

@@ -42,8 +42,8 @@
       android:layout_height="170dp"
       android:layout_alignParentStart="true"
       android:layout_alignParentTop="true"
-      android:layout_marginStart="0dp"
-      android:layout_marginTop="508dp"
+      android:layout_marginStart="207dp"
+      android:layout_marginTop="341dp"
       android:background="#C60048FF"
       android:padding="20dp"
       android:textColor="#69FF00" />
@@ -53,7 +53,9 @@
       android:layout_width="wrap_content"
       android:layout_height="wrap_content"
       android:layout_alignParentTop="true"
-      android:layout_marginTop="136dp"
+      android:layout_centerInParent="true"
+      android:layout_centerVertical="true"
+      android:layout_marginTop="622dp"
       android:paddingLeft="20dp"
       android:paddingTop="10dp"
       android:paddingRight="20dp"
@@ -64,7 +66,7 @@
       fancy:fb_focusColor="#237AD8"
       fancy:fb_iconPosition="left"
       fancy:fb_radius="30dp"
-      fancy:fb_text="Save Data (Place Anchor First)"
+      fancy:fb_text="Capture Data (Place Anchor First)"
       fancy:fb_textColor="#FFFFFF" />
 
   <mehdi.sakout.fancybuttons.FancyButton
@@ -85,6 +87,26 @@
       fancy:fb_iconPosition="left"
       fancy:fb_radius="30dp"
       fancy:fb_text="Localise"
+      fancy:fb_textColor="#FFFFFF" />
+
+  <mehdi.sakout.fancybuttons.FancyButton
+      android:id="@+id/hideAllButton"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:layout_alignParentTop="true"
+      android:layout_marginTop="573dp"
+      android:paddingLeft="20dp"
+      android:paddingTop="10dp"
+      android:paddingRight="20dp"
+      android:paddingBottom="10dp"
+      android:layout_centerInParent="true"
+      fancy:fb_borderColor="#FFFFFF"
+      fancy:fb_borderWidth="1dp"
+      fancy:fb_defaultColor="#63D400"
+      fancy:fb_focusColor="#59F321"
+      fancy:fb_iconPosition="left"
+      fancy:fb_radius="30dp"
+      fancy:fb_text="Show/Hide Controls"
       fancy:fb_textColor="#FFFFFF" />
 
   <mehdi.sakout.fancybuttons.FancyButton

@@ -66,14 +66,19 @@ import com.google.ar.core.exceptions.UnavailableUserDeclinedInstallationExceptio
 import org.json.JSONException;
 
 import java.io.BufferedOutputStream;
+import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
@@ -227,10 +232,20 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
     drawAxesButton.setOnClickListener(v -> {
       drawAxes = !drawAxes;
+      try {
+        write3DPoints(pointCloudVMServer);
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
     });
 
     sendDataButton.setOnClickListener( v -> {
-      isSending = !isSending;
+//      isSending = !isSending;
+      try {
+        load3DPoints();
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
     });
 
     localiseButton.setOnClickListener( v -> {
@@ -589,13 +604,15 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
         FloatBuffer pointCloudAnchors = pointCloud.getPoints().duplicate();
 //        FloatBuffer pointCloudLocal = pointCloud.getPoints().duplicate();
-        pointCloudServer = pointCloud.getPoints().duplicate();
+        //pointCloudServer = pointCloud.getPoints().duplicate();
+        pointCloudVMServer = pointCloud.getPoints().duplicate();
 
         if(!drawAxes){
-          System.out.println("Setting the server model");
-          pointCloudVMServer = pointCloud.getPoints().duplicate().asReadOnlyBuffer();
+
+
+
         }else{
-          System.out.println("Done setting the server model");
+
         }
 
         addAnchors(pointCloudAnchors);
@@ -1059,7 +1076,28 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     outputStream.close();
   }
 
+  private void load3DPoints() throws IOException {
 
+    String pointsFilePath = Environment.getExternalStorageDirectory().toString() + "/data_ar/points3Dworld.txt";
+    int noLines = 0;
+
+    try (BufferedReader br = new BufferedReader(new InputStreamReader(
+            new FileInputStream(pointsFilePath), StandardCharsets.UTF_8));) {
+
+      String line;
+
+
+      while ((line = br.readLine()) != null) {
+
+//        System.out.println(line);
+        if(line != "\n"){
+          noLines++;
+        }
+      }
+    }
+
+    System.out.println("End REading file. Total Lines: " + noLines);
+  }
 
   private void writeMatrixToFile(float[] matrix, String filename) throws IOException {
     String matrixString = matrix[0] + " " + matrix[4] + " " + matrix[8] + " " +  matrix[12] + "\n" +

@@ -282,6 +282,8 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     deleteFiles("data_ar");
 
 //    external_points = loadPoints();
+
+    pointCloudVMServer = getRandomFloatBuffer();
   }
 
   @Override
@@ -397,8 +399,10 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       // Create the texture and pass it to ARCore session to be filled during update().
       backgroundRenderer.createOnGlThread(/*context=*/ this);
       pointCloudRenderer.createOnGlThread(/*context=*/ this);
+
       virtualObject.createOnGlThread(/*context=*/ this, "models/andy.obj", "models/andy.png");
       virtualObject.setMaterialProperties(0.0f, 2.0f, 0.5f, 6.0f);
+
       serverModelCloudRenderer.createOnGlThread(/*context=*/this);
 
     } catch (IOException e) {
@@ -483,7 +487,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
         virtualObject.updateModelMatrix(anchorMatrix, ANCHOR_SCALE_FACTOR);
         virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, coloredAnchor.color);
 
-        // TODO: get updated anchors here? 
+        // TODO: get updated anchors here?
         if(coloredAnchor.getType() == MAIN_ANCHOR) { //this is the first one
           //anchor
           Pose anchor_pose = coloredAnchor.anchor.getPose();
@@ -503,21 +507,21 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
       if(drawAxes){
 
-        for(int i = 0; i < serverPoints.size(); i++){
-          if(!serverPoints.get(i).isEmpty()) {
-            String[] point = serverPoints.get(i).split(" ");
-
-            float x = Float.parseFloat(point[0]);
-            float y = Float.parseFloat(point[1]);
-            float z = Float.parseFloat(point[2]);
-            float h = Float.parseFloat(point[3]);
-
-            Pose pose = Pose.makeTranslation(x,y,z);
-            pose.toMatrix(pointMatrix, 0);
-            virtualObject.updateModelMatrix(pointMatrix, ANCHOR_SCALE_FACTOR);
-            virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, white);
-          }
-        }
+//        for(int i = 0; i < serverPoints.size(); i++){
+//          if(!serverPoints.get(i).isEmpty()) {
+//            String[] point = serverPoints.get(i).split(" ");
+//
+//            float x = Float.parseFloat(point[0]);
+//            float y = Float.parseFloat(point[1]);
+//            float z = Float.parseFloat(point[2]);
+//            float h = Float.parseFloat(point[3]);
+//
+//            Pose pose = Pose.makeTranslation(x,y,z);
+//            pose.toMatrix(pointMatrix, 0);
+//            virtualObject.updateModelMatrix(pointMatrix, ANCHOR_SCALE_FACTOR);
+//            virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, white);
+//          }
+//        }
 
 //        Pose pose = Pose.makeTranslation(0,0,0);
 //        pose.toMatrix(pointMatrix, 0);
@@ -606,19 +610,31 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
         FloatBuffer pointCloudAnchors = pointCloud.getPoints().duplicate();
 //        FloatBuffer pointCloudLocal = pointCloud.getPoints().duplicate();
-        pointCloudServer = pointCloud.getPoints().duplicate();
-        pointCloudVMServer = pointCloud.getPoints().duplicate();
+        //pointCloudServer = pointCloud.getPoints().duplicate();
+
+        if(!drawAxes){
+          System.out.println("Setting the server model");
+          //pointCloudVMServer = pointCloud.getPoints().duplicate().asReadOnlyBuffer();
+        }else{
+          System.out.println("Done setting the server model");
+        }
 
         addAnchors(pointCloudAnchors);
 //        write3DPoints(pointCloudLocal);
 
         if(haveServerPoses && modelServerLoaded){
-          System.out.println("Drawing duplicate points cloud");
-          pointCloudRenderer.updateFB(modelServer);
-          pointCloudRenderer.draw(viewmtx, projmtx);
+//          System.out.println("Drawing duplicate points cloud");
+//          pointCloudRenderer.updateFB(modelServer);
+//          pointCloudRenderer.draw(viewmtx, projmtx);
         }else{
-          pointCloudRenderer.update(pointCloud); // this "uses" up the pointcloud
-          pointCloudRenderer.draw(viewmtx, projmtx);
+          if(drawAxes) {
+            System.out.println("Drawing Server points");
+            serverModelCloudRenderer.update(pointCloudVMServer); // this "uses" up the pointcloud
+            serverModelCloudRenderer.draw(viewmtx, projmtx);
+          }else {
+            pointCloudRenderer.update(pointCloud); // this "uses" up the pointcloud
+            pointCloudRenderer.draw(viewmtx, projmtx);
+          }
         }
       }
 
@@ -629,6 +645,23 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       Log.e(TAG, "Exception on the OpenGL thread", t);
     }
 
+  }
+
+  private FloatBuffer getRandomFloatBuffer() {
+
+    FloatBuffer fb = FloatBuffer.allocate(500*4);
+
+    for (int i = 0; i < 500; i++) {
+      float x = (float) Math.random();
+      fb.put(x);
+      float y = (float) Math.random();
+      fb.put(y);
+      float z = - (float) Math.random();
+      fb.put(z);
+      float c = 1.0f;
+      fb.put(c);
+    }
+    return (FloatBuffer) fb.rewind();
   }
 
   @Override
@@ -700,7 +733,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
             + modelServer.array().length);
 
     System.out.println("Model in Memory!");
-    serverModelCloudRenderer.update(modelServer);
+//    serverModelCloudRenderer.update(modelServer);
     System.out.println("serverModelCloudRenderer updated!");
 
     modelServerLoaded = true;
@@ -1063,6 +1096,8 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     outputStream.flush();
     outputStream.close();
   }
+
+
 
   private void writeMatrixToFile(float[] matrix, String filename) throws IOException {
     String matrixString = matrix[0] + " " + matrix[4] + " " + matrix[8] + " " +  matrix[12] + "\n" +

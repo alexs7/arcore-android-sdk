@@ -21,6 +21,7 @@ import android.opengl.Matrix;
 import com.google.ar.core.PointCloud;
 import java.io.IOException;
 import java.nio.FloatBuffer;
+import java.util.Arrays;
 
 /** Renders a point cloud. */
 public class ServerModelCloudRenderer {

@@ -4,7 +4,6 @@ import android.opengl.Matrix;
 
 import com.google.ar.core.Anchor;
 import com.google.ar.core.Camera;
-import com.google.ar.core.Frame;
 import com.google.ar.core.Pose;
 import com.google.gson.Gson;
 
@@ -13,8 +12,6 @@ import org.json.JSONObject;
 
 import java.io.IOException;
 import java.nio.FloatBuffer;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 
 import okhttp3.Call;
@@ -46,7 +43,7 @@ public class ClientWrapper {
         this.callBackAction = callBackAction;
     }
 
-    public void sendData(Camera camera, String frameBase64, Anchor anchor, float[] projmtx, float[] viewmtx, FloatBuffer pointCloudServer, FloatBuffer pointCloudVMServer) throws JSONException {
+    public void sendData(Camera camera, String frameBase64, Anchor anchor, float[] projmtx, float[] viewmtx, FloatBuffer pointCloudServer) throws JSONException {
 
         String cameraPose = getCameraPoseString(camera.getPose());
         String cameraPoseCamCenter = getCameraCenter(camera.getPose());
@@ -72,7 +69,6 @@ public class ClientWrapper {
 
         String anchorPosition = getAnchorsPosition(anchor);
         String pointCloud = getPointCloudAsString(pointCloudServer);
-        String pointCloudByViewMatrix = getPointCloudByViewMatrixAsString(viewmtx, pointCloudVMServer);
 
         JSONObject postData = new JSONObject();
         postData.put("cameraPose", cameraPose);
@@ -86,7 +82,6 @@ public class ClientWrapper {
         postData.put("cameraDisplayOrientedPoseCamCenter", cameraDisplayOrientedPoseCamCenter);
         postData.put("debugAnchorPositionForCameraPose", debugAnchorPositionForCameraPose);
         postData.put("debugAnchorPositionForDisplayOrientedPose", debugAnchorPositionForDisplayOrientedPose);
-        postData.put("pointCloudByViewMatrix", pointCloudByViewMatrix);
         postData.put("viewmtx", viewMatrix);
         postData.put("projMatrix", projMatrix);
         postData.put("cameraPoseMatrix", cameraPoseMatrix);
@@ -201,10 +196,40 @@ public class ClientWrapper {
     }
 
 
-    public void sendLocaliseCommand() throws JSONException {
+    public void sendLocaliseCommand(Camera camera, String frameData, String frameName) throws JSONException {
+
+        String cameraPose = getCameraPoseString(camera.getPose());
+        String cameraPoseCamCenter = getCameraCenter(camera.getPose());
+        String cameraPoseLocalAxes = getLocalAxes(camera.getPose());
+
+        String cameraDisplayOrientedPose = getCameraPoseString(camera.getDisplayOrientedPose());
+        String cameraDisplayOrientedPoseLocalAxes = getLocalAxes(camera.getDisplayOrientedPose());
+        String cameraDisplayOrientedPoseCamCenter = getCameraCenter(camera.getDisplayOrientedPose());
+
+        float[] matrix = new float[16];
+        camera.getPose().toMatrix(matrix,0);
+        String cameraPoseMatrix = getMatrixString(matrix);
+
+        matrix = new float[16];
+        camera.getDisplayOrientedPose().toMatrix(matrix,0);
+        String cameraDisplayOrientedPoseMatrix = getMatrixString(matrix);
+
+        String debugAnchorPositionForCameraPose =  getDebugAnchorPosition(new float[]{1.f,0.f,0.f}, camera.getPose());
+        String debugAnchorPositionForDisplayOrientedPose =  getDebugAnchorPosition(new float[]{1.f,0.f,0.f}, camera.getDisplayOrientedPose());
 
         JSONObject postData = new JSONObject();
-        postData.put("command", "localise");
+        postData.put("cameraPose", cameraPose);
+        postData.put("cameraDisplayOrientedPose", cameraDisplayOrientedPose);
+        postData.put("frameString", frameData);
+        postData.put("cameraPoseLocalAxes", cameraPoseLocalAxes);
+        postData.put("cameraDisplayOrientedPoseLocalAxes", cameraDisplayOrientedPoseLocalAxes);
+        postData.put("cameraPoseCamCenter", cameraPoseCamCenter);
+        postData.put("cameraDisplayOrientedPoseCamCenter", cameraDisplayOrientedPoseCamCenter);
+        postData.put("debugAnchorPositionForCameraPose", debugAnchorPositionForCameraPose);
+        postData.put("debugAnchorPositionForDisplayOrientedPose", debugAnchorPositionForDisplayOrientedPose);
+        postData.put("cameraPoseMatrix", cameraPoseMatrix);
+        postData.put("cameraDisplayOrientedPoseMatrix", cameraDisplayOrientedPoseMatrix);
+        postData.put("frameName", frameName);
 
         MediaType JSON = MediaType.get("application/json; charset=utf-8");
 

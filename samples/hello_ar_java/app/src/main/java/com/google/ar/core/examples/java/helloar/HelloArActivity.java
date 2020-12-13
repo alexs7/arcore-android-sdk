@@ -82,6 +82,11 @@ import java.util.List;
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
 import mehdi.sakout.fancybuttons.FancyButton;
+import okhttp3.Call;
+import okhttp3.Callback;
+import okhttp3.Request;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
 
 /**
  * This is a simple example that shows how to create an augmented reality (AR) application using the
@@ -143,7 +148,6 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   private boolean isSending = false;
   private TextView debugTextView;
   private TextView arDataTextView;
-  private TextView arDataTextView_Right;
   private static final float RADIANS_TO_DEGREES = (float) (180 / Math.PI);
   private static final String DEBUG_TEXT_FORMAT =
           "Saving Frames: %s\n" +
@@ -168,10 +172,12 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   private Anchor mainAnchor = null;
   private FloatBuffer pointCloudServer = null;
   private FloatBuffer pointCloudVMServer = null;
-  private boolean haveServerPoses = false;
   private FloatBuffer modelServer = null;
-  private boolean modelServerLoaded = false;
   private ArrayList<String> serverPoints = null;
+  private String frameData;
+  private float[] projmtx;
+  private float[] viewmtx;
+  private Camera camera;
 
   // Anchors created from taps used for object placing with a given color.
   public static class ColoredAnchor {
@@ -254,7 +260,8 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
     localiseButton.setOnClickListener( v -> {
       try {
-        client.sendLocaliseCommand();
+        String frameName = "frame_"+getTimestamp()+".jpg";
+        client.sendLocaliseCommand(camera, frameData, frameName);
       } catch (JSONException e) {
         e.printStackTrace();
       }
@@ -283,7 +290,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
 //    external_points = loadPoints();
 
-    pointCloudVMServer = getRandomFloatBuffer();
+//    pointCloudVMServer = getRandomFloatBuffer();
   }
 
   @Override
@@ -442,7 +449,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       // UpdateMode.BLOCKING (it is by default), this will throttle the rendering to the
       // camera framerate.
       Frame frame = session.update();
-      Camera camera = frame.getCamera();
+      camera = frame.getCamera();
 
       // If frame is ready, render camera preview image to the GL surface.
       backgroundRenderer.draw(frame);
@@ -459,11 +466,11 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       }
 
       // Get projection matrix.
-      float[] projmtx = new float[16];
+      projmtx = new float[16];
       camera.getProjectionMatrix(projmtx, 0, 0.1f, 100.0f);
 
       // Get camera matrix and draw.
-      float[] viewmtx = new float[16];
+      viewmtx = new float[16];
       camera.getViewMatrix(viewmtx, 0); // uses the DisplayOrientedPose
 
       // Compute lighting from average intensity of the image.
@@ -507,54 +514,54 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
       if(drawAxes){
 
-//        for(int i = 0; i < serverPoints.size(); i++){
-//          if(!serverPoints.get(i).isEmpty()) {
-//            String[] point = serverPoints.get(i).split(" ");
-//
-//            float x = Float.parseFloat(point[0]);
-//            float y = Float.parseFloat(point[1]);
-//            float z = Float.parseFloat(point[2]);
-//            float h = Float.parseFloat(point[3]);
-//
-//            Pose pose = Pose.makeTranslation(x,y,z);
-//            pose.toMatrix(pointMatrix, 0);
-//            virtualObject.updateModelMatrix(pointMatrix, ANCHOR_SCALE_FACTOR);
-//            virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, white);
-//          }
-//        }
+        for(int i = 0; i < serverPoints.size(); i++){
+          if(!serverPoints.get(i).isEmpty()) {
+            String[] point = serverPoints.get(i).split(" ");
 
-//        Pose pose = Pose.makeTranslation(0,0,0);
-//        pose.toMatrix(pointMatrix, 0);
-//        virtualObject.updateModelMatrix(pointMatrix, ANCHOR_SCALE_FACTOR);
-//        virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, white);
-//
-//        float starting_offset = 0.02f;
-//        for (int i = 1; i <= 10; i++) {
-//          float offset = i/20f;
-//          pose = Pose.makeTranslation(starting_offset + offset,0,0);
-//          pose.toMatrix(pointMatrix, 0);
-//          // Update and draw the model and its shadow.
-//          virtualObject.updateModelMatrix(pointMatrix, ANCHOR_SCALE_FACTOR);
-//          virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, red);
-//        }
-//
-//        for (int i = 1; i <= 10; i++) {
-//          float offset = i/20f;
-//          pose = Pose.makeTranslation(0, starting_offset + offset, 0);
-//          pose.toMatrix(pointMatrix, 0);
-//          // Update and draw the model and its shadow.
-//          virtualObject.updateModelMatrix(pointMatrix, ANCHOR_SCALE_FACTOR);
-//          virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, green);
-//        }
-//
-//        for (int i = -5; i <= 10; i++) {
-//          float offset = i/20f;
-//          pose = Pose.makeTranslation(0,0,starting_offset + offset);
-//          pose.toMatrix(pointMatrix, 0);
-//          // Update and draw the model and its shadow.
-//          virtualObject.updateModelMatrix(pointMatrix, ANCHOR_SCALE_FACTOR);
-//          virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, blue);
-//        }
+            float x = Float.parseFloat(point[0]);
+            float y = Float.parseFloat(point[1]);
+            float z = Float.parseFloat(point[2]);
+            float h = Float.parseFloat(point[3]);
+
+            Pose pose = Pose.makeTranslation(x,y,z);
+            pose.toMatrix(pointMatrix, 0);
+            virtualObject.updateModelMatrix(pointMatrix, ANCHOR_SCALE_FACTOR);
+            virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, white);
+          }
+        }
+
+        Pose pose = Pose.makeTranslation(0,0,0);
+        pose.toMatrix(pointMatrix, 0);
+        virtualObject.updateModelMatrix(pointMatrix, ANCHOR_SCALE_FACTOR);
+        virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, white);
+
+        float starting_offset = 0.02f;
+        for (int i = 1; i <= 10; i++) {
+          float offset = i/20f;
+          pose = Pose.makeTranslation(starting_offset + offset,0,0);
+          pose.toMatrix(pointMatrix, 0);
+          // Update and draw the model and its shadow.
+          virtualObject.updateModelMatrix(pointMatrix, ANCHOR_SCALE_FACTOR);
+          virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, red);
+        }
+
+        for (int i = 1; i <= 10; i++) {
+          float offset = i/20f;
+          pose = Pose.makeTranslation(0, starting_offset + offset, 0);
+          pose.toMatrix(pointMatrix, 0);
+          // Update and draw the model and its shadow.
+          virtualObject.updateModelMatrix(pointMatrix, ANCHOR_SCALE_FACTOR);
+          virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, green);
+        }
+
+        for (int i = -5; i <= 10; i++) {
+          float offset = i/20f;
+          pose = Pose.makeTranslation(0,0,starting_offset + offset);
+          pose.toMatrix(pointMatrix, 0);
+          // Update and draw the model and its shadow.
+          virtualObject.updateModelMatrix(pointMatrix, ANCHOR_SCALE_FACTOR);
+          virtualObject.draw(viewmtx, projmtx, colorCorrectionRgba, blue);
+        }
       }
 
       long elapsedTime = nowTime - startTime;
@@ -566,8 +573,8 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
           if(anchors.size() > 0) {
             Anchor mainAnchor = anchors.get(0).anchor;
             Image image = frame.acquireCameraImage();
-            String frameData = getFrameBase64String(image);
-            client.sendData(camera, frameData, mainAnchor, projmtx, viewmtx, pointCloudServer, pointCloudVMServer);
+            frameData = getFrameBase64String(image);
+            client.sendData(camera, frameData, mainAnchor, projmtx, viewmtx, pointCloudServer);
             image.close();
           }
         }
@@ -609,32 +616,18 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
       try (PointCloud pointCloud = frame.acquirePointCloud()) {
 
         FloatBuffer pointCloudAnchors = pointCloud.getPoints().duplicate();
-//        FloatBuffer pointCloudLocal = pointCloud.getPoints().duplicate();
-        //pointCloudServer = pointCloud.getPoints().duplicate();
-
-        if(!drawAxes){
-          System.out.println("Setting the server model");
-          //pointCloudVMServer = pointCloud.getPoints().duplicate().asReadOnlyBuffer();
-        }else{
-          System.out.println("Done setting the server model");
-        }
+        pointCloudServer = pointCloud.getPoints().duplicate();
 
         addAnchors(pointCloudAnchors);
 //        write3DPoints(pointCloudLocal);
 
-        if(haveServerPoses && modelServerLoaded){
-//          System.out.println("Drawing duplicate points cloud");
-//          pointCloudRenderer.updateFB(modelServer);
-//          pointCloudRenderer.draw(viewmtx, projmtx);
-        }else{
-          if(drawAxes) {
-            System.out.println("Drawing Server points");
-            serverModelCloudRenderer.update(pointCloudVMServer); // this "uses" up the pointcloud
-            serverModelCloudRenderer.draw(viewmtx, projmtx);
-          }else {
-            pointCloudRenderer.update(pointCloud); // this "uses" up the pointcloud
-            pointCloudRenderer.draw(viewmtx, projmtx);
-          }
+        pointCloudRenderer.update(pointCloud); // this "uses" up the pointcloud
+        pointCloudRenderer.draw(viewmtx, projmtx);
+
+        if(pointCloudVMServer != null){
+          pointCloudVMServer = pointCloudVMServer.duplicate().asReadOnlyBuffer();
+          serverModelCloudRenderer.update(pointCloudVMServer); // this "uses" up the pointcloud
+          serverModelCloudRenderer.draw(viewmtx, projmtx);
         }
       }
 
@@ -672,7 +665,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     getARCorePoseFromServerResponseMatrix(serverPoseValues).toMatrix(serverPoseMatrix, 0);
     getARCorePoseFromServerResponseMatrix(mobilePoseValues).toMatrix(mobilePoseMatrix, 0);
 
-    haveServerPoses = true;
+    pointCloudVMServer = getRandomFloatBuffer();
   }
 
   private Pose getARCorePoseFromServerResponseMatrix(ArrayList<String> poseValues) {
@@ -736,8 +729,6 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 //    serverModelCloudRenderer.update(modelServer);
     System.out.println("serverModelCloudRenderer updated!");
 
-    modelServerLoaded = true;
-
   }
 
   private String getFrameBase64String(Image image) {
@@ -747,19 +738,22 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     return new String(imageDataBase64);
   }
 
-  private void saveData(ArrayList<ColoredAnchor> anchors, float[] viewmtx, float[] projmtx, Frame frame, Camera camera) throws NotYetAvailableException {
-    Long tsLong = System.currentTimeMillis();
-    String timestamp = tsLong.toString();
+  private String getTimestamp(){
+      Long tsLong = System.currentTimeMillis();
+      String timestamp = tsLong.toString();
+      return timestamp;
+  }
 
-    System.out.println("Saving at:" + timestamp);
+  private void saveData(ArrayList<ColoredAnchor> anchors, float[] viewmtx, float[] projmtx, Frame frame, Camera camera) throws NotYetAvailableException {
+    String timestamp = getTimestamp();
 
     ArrayList<double[]> imageAnchorCorrespondences = getImageAnchorCorrespondences(frame, this.anchors, viewmtx, projmtx);
 
     Image frameImage = null;
     try {
 
-      writeIntrinsicsToFile(camera.getImageIntrinsics(), "imageIntrinsics_" + timestamp);
-      writeCorrespondences(imageAnchorCorrespondences, "imageAnchorCorrespondences_" + timestamp); //be careful about its position (if / else)
+//      writeIntrinsicsToFile(camera.getImageIntrinsics(), "imageIntrinsics_" + timestamp);
+//      writeCorrespondences(imageAnchorCorrespondences, "imageAnchorCorrespondences_" + timestamp); //be careful about its position (if / else)
 
       frameImage = frame.acquireCameraImage();
       saveCPUFrameJPEG(frameImage, timestamp);
@@ -771,7 +765,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
       Pose cameraPoseOriented = camera.getDisplayOrientedPose();
       cameraPoseOriented.toMatrix(poseOrientedMatrix,0);
-//      writeMatrixToFile(poseOrientedMatrix,"displayOrientedPose_"+timestamp);
+      writeMatrixToFile(poseOrientedMatrix,"displayOrientedPose_"+timestamp);
 
       Pose cameraPose = camera.getPose();
       cameraPose.toMatrix(cameraPoseMatrix,0);

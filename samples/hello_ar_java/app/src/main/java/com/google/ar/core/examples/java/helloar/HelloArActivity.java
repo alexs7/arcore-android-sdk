@@ -82,11 +82,6 @@ import java.util.List;
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
 import mehdi.sakout.fancybuttons.FancyButton;
-import okhttp3.Call;
-import okhttp3.Callback;
-import okhttp3.Request;
-import okhttp3.Response;
-import okhttp3.ResponseBody;
 
 /**
  * This is a simple example that shows how to create an augmented reality (AR) application using the
@@ -261,8 +256,9 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     localiseButton.setOnClickListener( v -> {
       try {
         String frameName = "frame_"+getTimestamp()+".jpg";
-        client.sendLocaliseCommand(camera, frameData, frameName);
-      } catch (JSONException e) {
+        pointCloudVMServer = getRandomFloatBuffer();
+        //client.sendLocaliseCommand(camera, frameData, frameName);
+      } catch (Exception e) {
         e.printStackTrace();
       }
     });
@@ -640,6 +636,23 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 
   }
 
+  private FloatBuffer createFloatBuffer(ArrayList<String> points) {
+
+    FloatBuffer fb = FloatBuffer.allocate(points.size());
+
+    for (int i = 0; i < points.size(); i+=4) {
+      float x = Float.parseFloat(points.get(i));
+      fb.put(x);
+      float y = Float.parseFloat(points.get(i+1));
+      fb.put(y);
+      float z = Float.parseFloat(points.get(i+2));
+      fb.put(z);
+      float c = Float.parseFloat(points.get(i+3));
+      fb.put(c);
+    }
+    return (FloatBuffer) fb.rewind();
+  }
+
   private FloatBuffer getRandomFloatBuffer() {
 
     FloatBuffer fb = FloatBuffer.allocate(500*4);
@@ -658,13 +671,14 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   }
 
   @Override
-  public void setServerPose(ServerPose pose){
-    ArrayList<String> serverPoseValues = pose.getServer_pose();
-    ArrayList<String> mobilePoseValues = pose.getArcore_pose();
-
-    getARCorePoseFromServerResponseMatrix(serverPoseValues).toMatrix(serverPoseMatrix, 0);
-    getARCorePoseFromServerResponseMatrix(mobilePoseValues).toMatrix(mobilePoseMatrix, 0);
-
+  public void setServerPoints(ServerPoints serverPoints){
+//    ArrayList<String> serverPoseValues = pose.getServer_pose();
+//    ArrayList<String> mobilePoseValues = pose.getArcore_pose();
+//
+//    getARCorePoseFromServerResponseMatrix(serverPoseValues).toMatrix(serverPoseMatrix, 0);
+//    getARCorePoseFromServerResponseMatrix(mobilePoseValues).toMatrix(mobilePoseMatrix, 0);
+    ArrayList<String> points = serverPoints.getPoints();
+    //pointCloudVMServer = createFloatBuffer(points);
     pointCloudVMServer = getRandomFloatBuffer();
   }
 

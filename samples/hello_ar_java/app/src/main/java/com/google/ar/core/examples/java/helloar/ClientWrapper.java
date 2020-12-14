@@ -249,8 +249,10 @@ public class ClientWrapper {
                     if (!response.isSuccessful()) throw new IOException("Unexpected code " + response);
 
                     System.out.println("HTTP Request Done");
-                    ServerPose serverPose = gson.fromJson(responseBody.string(), ServerPose.class);
-                    callBackAction.setServerPose(serverPose);
+                    //String foo = responseBody.string();
+                    ServerPoints serverPoints = gson.fromJson(responseBody.string(), ServerPoints.class);
+                    callBackAction.setServerPoints(serverPoints);
+
 
                 }
             }

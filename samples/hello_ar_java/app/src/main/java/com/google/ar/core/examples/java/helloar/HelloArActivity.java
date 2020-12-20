@@ -256,8 +256,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     localiseButton.setOnClickListener( v -> {
       try {
         String frameName = "frame_"+getTimestamp()+".jpg";
-        pointCloudVMServer = getRandomFloatBuffer();
-        //client.sendLocaliseCommand(camera, frameData, frameName);
+        client.sendLocaliseCommand(camera, frameData, frameName);
       } catch (Exception e) {
         e.printStackTrace();
       }
@@ -621,7 +620,8 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
         pointCloudRenderer.draw(viewmtx, projmtx);
 
         if(pointCloudVMServer != null){
-          pointCloudVMServer = pointCloudVMServer.duplicate().asReadOnlyBuffer();
+          System.out.println("Drawing Server points");
+          //pointCloudVMServer = pointCloudVMServer.duplicate().asReadOnlyBuffer();
           serverModelCloudRenderer.update(pointCloudVMServer); // this "uses" up the pointcloud
           serverModelCloudRenderer.draw(viewmtx, projmtx);
         }
@@ -678,8 +678,8 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 //    getARCorePoseFromServerResponseMatrix(serverPoseValues).toMatrix(serverPoseMatrix, 0);
 //    getARCorePoseFromServerResponseMatrix(mobilePoseValues).toMatrix(mobilePoseMatrix, 0);
     ArrayList<String> points = serverPoints.getPoints();
-    //pointCloudVMServer = createFloatBuffer(points);
-    pointCloudVMServer = getRandomFloatBuffer();
+    pointCloudVMServer = createFloatBuffer(points);
+    //pointCloudVMServer = getRandomFloatBuffer();
   }
 
   private Pose getARCorePoseFromServerResponseMatrix(ArrayList<String> poseValues) {

@@ -19,6 +19,8 @@ import android.opengl.GLES20;
 import android.opengl.GLSurfaceView;
 import android.opengl.Matrix;
 import com.google.ar.core.PointCloud;
+import com.google.ar.core.Pose;
+
 import java.io.IOException;
 import java.nio.FloatBuffer;
 
@@ -42,6 +44,7 @@ public class PointCloudRenderer {
   private int positionAttribute;
   private int modelViewProjectionUniform;
   private int colorUniform;
+  private int cameraPosition;
   private int pointSizeUniform;
 
   private int numPoints = 0;
@@ -87,6 +90,7 @@ public class PointCloudRenderer {
 
     positionAttribute = GLES20.glGetAttribLocation(programName, "a_Position");
     colorUniform = GLES20.glGetUniformLocation(programName, "u_Color");
+    cameraPosition = GLES20.glGetUniformLocation(programName, "u_cameraPosition");
     modelViewProjectionUniform = GLES20.glGetUniformLocation(programName, "u_ModelViewProjection");
     pointSizeUniform = GLES20.glGetUniformLocation(programName, "u_PointSize");
 
@@ -149,13 +153,14 @@ public class PointCloudRenderer {
 
   /**
    * Renders the point cloud. ARCore point cloud is given in world space.
-   *
+   * @param displayOrientedPose
    * @param cameraView the camera view matrix for this frame, typically from {@link
-   *     com.google.ar.core.Camera#getViewMatrix(float[], int)}.
+ *     com.google.ar.core.Camera#getViewMatrix(float[], int)}.
    * @param cameraPerspective the camera projection matrix for this frame, typically from {@link
-   *     com.google.ar.core.Camera#getProjectionMatrix(float[], int, float, float)}.
+*     com.google.ar.core.Camera#getProjectionMatrix(float[], int, float, float)}.
+   * @param pointSize
    */
-  public void draw(float[] cameraView, float[] cameraPerspective) {
+  public void draw(float[] cameraView, float[] cameraPerspective, Pose worldPose, int pointSize) {
     float[] modelViewProjection = new float[16];
     Matrix.multiplyMM(modelViewProjection, 0, cameraPerspective, 0, cameraView, 0);
 
@@ -166,8 +171,9 @@ public class PointCloudRenderer {
     GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, vbo);
     GLES20.glVertexAttribPointer(positionAttribute, 4, GLES20.GL_FLOAT, false, BYTES_PER_POINT, 0);
     GLES20.glUniform4f(colorUniform, 10.0f / 255.0f, 255.0f / 255.0f, 10.0f / 255.0f, 1.0f);
+    GLES20.glUniform4f(cameraPosition, worldPose.tx(),  worldPose.ty(),  worldPose.tz(), 1.0f);
     GLES20.glUniformMatrix4fv(modelViewProjectionUniform, 1, false, modelViewProjection, 0);
-    GLES20.glUniform1f(pointSizeUniform, 28.0f);
+    GLES20.glUniform1f(pointSizeUniform, (float) pointSize);
 
     GLES20.glDrawArrays(GLES20.GL_POINTS, 0, numPoints);
     GLES20.glDisableVertexAttribArray(positionAttribute);

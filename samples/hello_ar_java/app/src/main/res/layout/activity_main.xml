@@ -185,4 +185,17 @@
       fancy:fb_text="Send Data (Place Anchor First)"
       fancy:fb_textColor="#FFFFFF" />
 
+  <SeekBar
+      android:id="@+id/seekBar"
+      android:layout_width="300dp"
+      android:layout_height="wrap_content"
+      android:layout_alignParentTop="true"
+      android:layout_centerInParent="true"
+      android:layout_centerVertical="true"
+      android:layout_marginTop="690dp"
+      android:paddingLeft="20dp"
+      android:paddingTop="10dp"
+      android:paddingRight="20dp"
+      android:paddingBottom="10dp"/>
+
 </RelativeLayout>

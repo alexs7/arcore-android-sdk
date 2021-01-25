@@ -31,6 +31,7 @@ import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
+import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 import com.google.ar.core.Anchor;
@@ -173,6 +174,8 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
   private float[] projmtx;
   private float[] viewmtx;
   private Camera camera;
+  private SeekBar pointSizeSeekBar;
+  private int pointSize = 1;
 
   // Anchors created from taps used for object placing with a given color.
   public static class ColoredAnchor {
@@ -224,6 +227,26 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
     reloadElectronButton = findViewById(R.id.btn_reloadElectron);
     getModelButton = findViewById(R.id.btn_getModel);
     hideAllButton = findViewById(R.id.hideAllButton);
+    pointSizeSeekBar = findViewById(R.id.seekBar);
+
+    pointSizeSeekBar.setMin(1);
+    pointSizeSeekBar.setMax(100);
+    pointSizeSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+      @Override
+      public void onProgressChanged(SeekBar seekBar, int currentVal, boolean fromUser) {
+        pointSize = currentVal;
+      }
+
+      @Override
+      public void onStartTrackingTouch(SeekBar seekBar) {
+
+      }
+
+      @Override
+      public void onStopTrackingTouch(SeekBar seekBar) {
+
+      }
+    });
 
     hideAllButton.setOnClickListener( v -> {
       int visibility = debugTextView.getVisibility(); // check for one is enough
@@ -617,7 +640,7 @@ public class HelloArActivity extends AppCompatActivity implements GLSurfaceView.
 //        write3DPoints(pointCloudLocal);
 
         pointCloudRenderer.update(pointCloud); // this "uses" up the pointcloud
-        pointCloudRenderer.draw(viewmtx, projmtx);
+        pointCloudRenderer.draw(viewmtx, projmtx, camera.getDisplayOrientedPose(), pointSize);
 
         if(pointCloudVMServer != null){
           System.out.println("Drawing Server points");
